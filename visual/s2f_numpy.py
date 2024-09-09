@@ -1,4 +1,12 @@
+import sys
+
+sys.path.append('../')
+from tools.img import tensor2ndarray
+from tools.dataset import extract_dl
+from tools.inject_backdoor import patch_trigger
+
 import PIL
+import numpy
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
@@ -7,6 +15,8 @@ import torchvision
 from scipy.fftpack import dct, idct
 from PIL import Image
 from tqdm import tqdm
+from torch.utils.data.dataloader import DataLoader
+from torchvision.transforms.transforms import ToTensor, Resize, Compose
 
 
 def dct2(block):
@@ -16,37 +26,41 @@ def dct2(block):
 def idct2(block):
     return idct(idct(block.T, norm='ortho').T, norm='ortho')
 
+
 def clip(data, min=1.5, max=4.5):
-    return np.clip(data, min, max)
+    if data.shape[0] == 224:
+        return np.clip(data, min, max)
+    else:
+        return data
 
 
-scale = 224
-total = 100
-tg = cv2.imread('../resource/blended/hello_kitty.jpeg')
-tg = cv2.cvtColor(tg, cv2.COLOR_BGR2RGB)
-tg = cv2.resize(tg, (scale, scale))
-res_before = np.zeros_like(tg, dtype=np.float32)
-res_after = np.zeros_like(tg, dtype=np.float32)
+
+dataset_name = 'gtsrb'
+attack = 'blended'
+total = 1024
+scale, trans, dl = extract_dl(dataset_name, total)
+res_before = np.zeros((scale, scale, 3), dtype=np.float32)
+res_after = np.zeros((scale, scale, 3), dtype=np.float32)
+batch = next(iter(dl))[0]
 
 for i in tqdm(range(total)):
-    ds = torchvision.datasets.CelebA(root='../data', split='train', download=False)
-    x_space = np.array(ds[i][0])
-    # x_space = cv2.cvtColor(x_space, cv2.COLOR_BGR2RGB)
-    x_space = cv2.resize(x_space, (scale, scale))
-    x_space_blended = (x_space * 0.8 + tg * 0.2).astype(np.uint8)
+    x_space = batch[i] # this is a tensor
+    x_space_poison = patch_trigger(x_space, attack) # tensor too
+    x_space, x_space_poison = tensor2ndarray(x_space), tensor2ndarray(x_space_poison)
     x_dct = np.zeros_like(x_space, dtype=np.float32)
     for i in range(3):
-        x_dct[:, :, i] = dct2((x_space[:, :, i] * 255).astype(np.uint8))
-    x_dct_blended = np.zeros_like(x_space_blended, dtype=np.float32)
+        x_dct[:, :, i] = dct2((x_space[:, :, i]).astype(np.uint8))
+    x_dct_blended = np.zeros_like(x_space_poison, dtype=np.float32)
     for i in range(3):
-        x_dct_blended[:, :, i] = dct2((x_space_blended[:, :, i] * 255).astype(np.uint8))
+        x_dct_blended[:, :, i] = dct2((x_space_poison[:, :, i]).astype(np.uint8))
     res_before += x_dct
     res_after += x_dct_blended
+
 res_before /= total
 res_after /= total
 x_dct = res_before
 x_dct_blended = res_after
-# 绘制原图像与DCT的结果
+
 fig, axs = plt.subplots(2, 2, figsize=(15, 8))
 axs[0, 0].imshow(x_space)
 axs[0, 0].set_title('Original Image')
@@ -57,7 +71,7 @@ im1 = axs[0, 1].imshow(clip(x_dct[:, :, 0]), cmap='hot')
 axs[0, 1].set_title('Original Image DCT (Log Scale)')
 axs[0, 1].axis('off')
 
-axs[1, 0].imshow(x_space_blended)
+axs[1, 0].imshow(x_space_poison)
 axs[1, 0].set_title('Blended Image (80% Original, 20% tg)')
 axs[1, 0].axis('off')
 
