@@ -3,7 +3,7 @@ from torch.utils.data.dataloader import DataLoader
 import torchvision
 
 
-def extract_dl(dataset_name: str, batch_size: int) -> (int, Compose, DataLoader):
+def get_dataloader(dataset_name: str, batch_size: int) -> (int, Compose, DataLoader):
     """
     given dataset name and batch size, return image scale, transform, dataloader
     :param batch_size:
