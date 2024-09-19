@@ -26,4 +26,6 @@ def get_dataloader(dataset_name: str, batch_size: int) -> (int, Compose, DataLoa
         trans = Compose([ToTensor(), Resize((scale, scale))])
         ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=trans)
         dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=8)
+    elif dataset_name == 'pubfig':
+        pass
     return scale, trans, dl

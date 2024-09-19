@@ -1,6 +1,7 @@
 import cv2
 import numpy
 import numpy as np
+import pywt
 import torch
 from matplotlib import pyplot as plt
 import cv2
@@ -29,45 +30,93 @@ def tensor2ndarray(t: torch.Tensor) -> np.ndarray:
     return nd
 
 
-def dct2(x_0: numpy.ndarray, window: int = 4) -> numpy.ndarray:
+def dct_2d_slide_window(x_train: np.ndarray, window_size=32):
+    x_train = np.transpose(x_train, (2, 0, 1))
+    x_dct = np.zeros_like(x_train, dtype=float)
+    for ch in range(x_train.shape[0]):
+        for w in range(0, x_train.shape[1], window_size):
+            for h in range(0, x_train.shape[2], window_size):
+                x_dct[ch][w:w + window_size, h:h + window_size] = dct(
+                    dct((x_train[ch][w:w + window_size, h:h + window_size].astype(float)).T, norm='ortho').T,
+                    norm='ortho')
+    x_dct = np.transpose(x_dct, (1, 2, 0))
+    return x_dct
+
+
+def idct_2d_slide_window(x_train: np.ndarray, window_size=32):
+    x_train = np.transpose(x_train, (2, 0, 1))
+    x_idct = np.zeros(x_train.shape, dtype=float)
+    for ch in range(0, x_train.shape[0]):
+        for w in range(0, x_train.shape[1], window_size):
+            for h in range(0, x_train.shape[2], window_size):
+                x_idct[ch][w:w + window_size, h:h + window_size] = idct(
+                    idct((x_train[ch][w:w + window_size, h:h + window_size].astype(float)).T, norm='ortho').T,
+                    norm='ortho')
+    x_idct = np.transpose(x_idct, (1, 2, 0))
+    return x_idct
+
+
+def dct_2d_full_scale(x: np.ndarray):
+    return idct_2d_slide_window(x, x.shape[0])
+
+
+def dwt_3c(img: np.ndarray, wavelet='haar', clip=True) -> list:
     """
-    :param window: a shifted window
-    :param x_0: space domain, ndarray, wanted shape (w, h, ch)
-    :return: frequency domain (after DCT), ndarray
+
+    :param clip:
+    :param wavelet:
+    :param img: ndarray, shape (w, h, c), element should between 0 and 1
+    :return: [LL, LH, HL, HH] between 0 and 1
     """
-    x_0 = x_0.copy()
-    x_0 = np.transpose(x_0, axes=(2, 0, 1))
-    for ch in range(x_0.shape[0]):
-        for w in range(0, x_0.shape[1], window):
-            for h in range(0, x_0.shape[2], window):
-                sub_dct = cv2.dct(x_0[ch][w:w + window, h:h + window].astype(np.float32))
-                x_0[ch][w:w + window, h:h + window] = sub_dct
-    x_0 = np.transpose(x_0, axes=(1, 2, 0))
-    return x_0
+    LL_r, (LH_r, HL_r, HH_r) = pywt.dwt2(img[:, :, 0], wavelet)
+    LL_g, (LH_g, HL_g, HH_g) = pywt.dwt2(img[:, :, 1], wavelet)
+    LL_b, (LH_b, HL_b, HH_b) = pywt.dwt2(img[:, :, 2], wavelet)
+
+    LL = np.zeros(shape=(LL_r.shape[0], LL_r.shape[1], 3))
+    LH = np.zeros(shape=(LH_r.shape[0], LH_r.shape[1], 3))
+    HL = np.zeros(shape=(HL_r.shape[0], HL_r.shape[1], 3))
+    HH = np.zeros(shape=(HH_r.shape[0], HH_r.shape[1], 3))
+
+    LL[:, :, 0], LL[:, :, 1], LL[:, :, 2] = LL_r, LL_g, LL_b
+    LH[:, :, 0], LH[:, :, 1], LH[:, :, 2] = LH_r, LH_g, LH_b
+    HL[:, :, 0], HL[:, :, 1], HL[:, :, 2] = HL_r, HL_g, HL_b
+    HH[:, :, 0], HH[:, :, 1], HH[:, :, 2] = HH_r, HH_g, HH_b
+
+    if clip:
+        LL = np.clip(LL, 0., 1.)
+        LH = np.clip(LH, 0., 1.)
+        LH = np.clip(LH, 0., 1.)
+        HH = np.clip(HH, 0., 1.)
+    return [LL, (LH, HL, HH)]
 
 
-def idct2(x_0: numpy.ndarray, window: int = 4) -> numpy.ndarray:
+def idwt_3c(coeffs: list, wavelet='haar') -> np.ndarray:
     """
-    :param window: a shifted window
-    :param x_0: frequency domain (after DCT), ndarray
-    :return: string domain, ndarray
+    Perform the inverse discrete wavelet transform (IDWT) for a 3-channel RGB image.
+
+    :param coeffs: list of [LL, LH, HL, HH], each of shape (w, h, 3)
+    :param wavelet: wavelet type, default is 'haar'
+    :return: reconstructed image as ndarray with shape (w, h, 3), element values between 0 and 1
     """
-    x_0 = x_0.copy()
-    x_0 = np.transpose(x_0, axes=(2, 0, 1))
-    for ch in range(x_0.shape[0]):
-        for w in range(0, x_0.shape[1], window):
-            for h in range(0, x_0.shape[2], window):
-                sub_dct = cv2.idct(x_0[ch][w:w + window, h:h + window].astype(np.float32))
-                x_0[ch][w:w + window, h:h + window] = sub_dct
-    x_0 = np.transpose(x_0, axes=(1, 2, 0))
-    return x_0
+    LL, (LH, HL, HH) = coeffs
 
-def fft2(block: numpy.ndarray) -> numpy.ndarray:
-    return numpy.fft.fft2(block)
+    # Extract each channel from the wavelet coefficients
+    LL_r, LH_r, HL_r, HH_r = LL[:, :, 0], LH[:, :, 0], HL[:, :, 0], HH[:, :, 0]
+    LL_g, LH_g, HL_g, HH_g = LL[:, :, 1], LH[:, :, 1], HL[:, :, 1], HH[:, :, 1]
+    LL_b, LH_b, HL_b, HH_b = LL[:, :, 2], LH[:, :, 2], HL[:, :, 2], HH[:, :, 2]
 
+    # Perform IDWT for each channel
+    img_r = pywt.idwt2((LL_r, (LH_r, HL_r, HH_r)), wavelet)
+    img_g = pywt.idwt2((LL_g, (LH_g, HL_g, HH_g)), wavelet)
+    img_b = pywt.idwt2((LL_b, (LH_b, HL_b, HH_b)), wavelet)
 
-def ifft2(block: numpy.ndarray) -> numpy.ndarray:
-    return numpy.fft.ifft2(block)
+    # Stack the channels back into a 3-channel image
+    img_reconstructed = np.stack((img_r, img_g, img_b), axis=-1)
+
+    # Clip values to ensure they are in the range [0, 1]
+    img_reconstructed = np.clip(img_reconstructed, 0., 1.)
+
+    return img_reconstructed
 
 
 def rgb2yuv(x_rgb: numpy.ndarray) -> numpy.ndarray:
@@ -100,8 +149,14 @@ def yuv2rgb(x_yuv):
     return cv2.cvtColor(x_yuv.astype(np.uint8), cv2.COLOR_YUV2RGB)
 
 
-def clip(data: numpy.ndarray, min=1.5, max=4.5) -> numpy.ndarray:
-    return np.clip(data, min, max)
+def clip(data: numpy.ndarray) -> numpy.ndarray:
+    if data.shape[0] > 64:
+        return np.clip(a=data, a_min=1.5, a_max=4.5)
+    else:
+        from scipy.ndimage import gaussian_filter
+        data = np.log1p(np.abs(data))
+        data = gaussian_filter(data, sigma=2)
+        return data
 
 
 def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x_process_target, is_clip: bool = False):
@@ -121,13 +176,13 @@ def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x
     axs[0, 0].imshow(x_space)
     axs[0, 0].set_title('Original Image')
     axs[0, 0].axis('off')
-    im1 = axs[0, 1].imshow(clip(x_target[:, :, 0]), cmap='hot')
+    im1 = axs[0, 1].imshow(x_target[:, :, 0], cmap='hot')
     axs[0, 1].set_title('Original Image DCT')
     axs[0, 1].axis('off')
     axs[1, 0].imshow(x_process_space)
     axs[1, 0].set_title(f'after (attack) process')
     axs[1, 0].axis('off')
-    im2 = axs[1, 1].imshow(clip(x_process_target[:, :, 0]), cmap='hot')
+    im2 = axs[1, 1].imshow(x_process_target[:, :, 0], cmap='hot')
     axs[1, 1].set_title(f'(attacked) img in target space')
     axs[1, 1].axis('off')
     cbar_ax = fig.add_axes([0.92, 0.1, 0.02, 0.35])
