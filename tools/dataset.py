@@ -15,17 +15,22 @@ def get_dataloader(dataset_name: str, batch_size: int) -> (int, Compose, DataLoa
         scale = 32
         trans = Compose([ToTensor(), Resize((scale, scale))])
         ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=8)
+        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
     elif dataset_name == 'celeba':
         scale = 224
         trans = Compose([ToTensor(), Resize((scale, scale))])
         ds = torchvision.datasets.CelebA(root='../data', split='test', transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=8)
+        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
     elif dataset_name == 'gtsrb':
         scale = 32
         trans = Compose([ToTensor(), Resize((scale, scale))])
         ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=8)
+        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
+    elif dataset_name == 'imagenette':
+        scale = 224
+        trans = Compose([ToTensor(), Resize((scale, scale))])
+        ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=trans)
+        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
     elif dataset_name == 'pubfig':
         pass
     return scale, trans, dl

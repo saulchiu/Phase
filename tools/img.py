@@ -30,7 +30,13 @@ def tensor2ndarray(t: torch.Tensor) -> np.ndarray:
     return nd
 
 
-def dct_2d_slide_window(x_train: np.ndarray, window_size=32):
+def dct_2d_3c_slide_window(x_train: np.ndarray, window_size=32):
+    """
+    input should be floated
+    :param x_train:
+    :param window_size:
+    :return:
+    """
     x_train = np.transpose(x_train, (2, 0, 1))
     x_dct = np.zeros_like(x_train, dtype=float)
     for ch in range(x_train.shape[0]):
@@ -43,7 +49,13 @@ def dct_2d_slide_window(x_train: np.ndarray, window_size=32):
     return x_dct
 
 
-def idct_2d_slide_window(x_train: np.ndarray, window_size=32):
+def idct_2d_3c_slide_window(x_train: np.ndarray, window_size=32):
+    """
+    input should be floated
+    :param x_train:
+    :param window_size:
+    :return:
+    """
     x_train = np.transpose(x_train, (2, 0, 1))
     x_idct = np.zeros(x_train.shape, dtype=float)
     for ch in range(0, x_train.shape[0]):
@@ -56,11 +68,14 @@ def idct_2d_slide_window(x_train: np.ndarray, window_size=32):
     return x_idct
 
 
-def dct_2d_full_scale(x: np.ndarray):
-    return idct_2d_slide_window(x, x.shape[0])
+def dct_2d_3c_full_scale(x: np.ndarray):
+    return idct_2d_3c_slide_window(x, x.shape[0])
+
+def idct_2d_3c_full_scale(x: np.ndarray):
+    return idct_2d_3c_slide_window(x, x.shape[0])
 
 
-def dwt_3c(img: np.ndarray, wavelet='haar', clip=True) -> list:
+def dwt_2d_3c(img: np.ndarray, wavelet='haar', clip=False) -> list:
     """
 
     :param clip:
@@ -90,7 +105,7 @@ def dwt_3c(img: np.ndarray, wavelet='haar', clip=True) -> list:
     return [LL, (LH, HL, HH)]
 
 
-def idwt_3c(coeffs: list, wavelet='haar') -> np.ndarray:
+def idwt_2d_3c(coeffs: list, wavelet='haar') -> np.ndarray:
     """
     Perform the inverse discrete wavelet transform (IDWT) for a 3-channel RGB image.
 
@@ -100,23 +115,32 @@ def idwt_3c(coeffs: list, wavelet='haar') -> np.ndarray:
     """
     LL, (LH, HL, HH) = coeffs
 
-    # Extract each channel from the wavelet coefficients
     LL_r, LH_r, HL_r, HH_r = LL[:, :, 0], LH[:, :, 0], HL[:, :, 0], HH[:, :, 0]
     LL_g, LH_g, HL_g, HH_g = LL[:, :, 1], LH[:, :, 1], HL[:, :, 1], HH[:, :, 1]
     LL_b, LH_b, HL_b, HH_b = LL[:, :, 2], LH[:, :, 2], HL[:, :, 2], HH[:, :, 2]
 
-    # Perform IDWT for each channel
     img_r = pywt.idwt2((LL_r, (LH_r, HL_r, HH_r)), wavelet)
     img_g = pywt.idwt2((LL_g, (LH_g, HL_g, HH_g)), wavelet)
     img_b = pywt.idwt2((LL_b, (LH_b, HL_b, HH_b)), wavelet)
 
-    # Stack the channels back into a 3-channel image
     img_reconstructed = np.stack((img_r, img_g, img_b), axis=-1)
-
-    # Clip values to ensure they are in the range [0, 1]
     img_reconstructed = np.clip(img_reconstructed, 0., 1.)
 
     return img_reconstructed
+
+def fft_2d_3c(x_0: np.ndarray):
+    x_f = []
+    for i in range(3):
+        x_f.append(np.fft.fft(x_0[:, :, i]))
+    x_f = np.stack(x_f, axis=2)
+    return x_f
+
+def ifft_2d_3c(x_0: np.ndarray):
+    x_i = []
+    for i in range(3):
+        x_i.append(np.fft.ifft(x_0[:, :, i]))
+    x_i = np.stack(x_i, axis=2)
+    return x_i
 
 
 def rgb2yuv(x_rgb: numpy.ndarray) -> numpy.ndarray:
@@ -172,16 +196,19 @@ def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x
     if is_clip:
         x_target = clip(x_target)
         x_process_target = clip(x_process_target)
-    fig, axs = plt.subplots(2, 2, figsize=(15, 8))
+    fig, axs = plt.subplots(2, 2, figsize=(10, 8))
     axs[0, 0].imshow(x_space)
     axs[0, 0].set_title('Original Image')
     axs[0, 0].axis('off')
-    im1 = axs[0, 1].imshow(x_target[:, :, 0], cmap='hot')
+
+    axs[0, 1].imshow(x_target[:, :, 0], cmap='hot')
     axs[0, 1].set_title('Original Image DCT')
     axs[0, 1].axis('off')
+
     axs[1, 0].imshow(x_process_space)
     axs[1, 0].set_title(f'after (attack) process')
     axs[1, 0].axis('off')
+
     im2 = axs[1, 1].imshow(x_process_target[:, :, 0], cmap='hot')
     axs[1, 1].set_title(f'(attacked) img in target space')
     axs[1, 1].axis('off')

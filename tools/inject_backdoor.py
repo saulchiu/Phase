@@ -1,4 +1,6 @@
+import PIL.Image
 import os
+import pywt
 
 import sys
 
@@ -7,8 +9,8 @@ import numpy
 import numpy as np
 
 sys.path.append('../')
-from tools.img import rgb2yuv, yuv2rgb, tensor2ndarray, ndarray2tensor, dct_2d_slide_window, idct_2d_slide_window, \
-    idct_2d_slide_window, dct_2d_slide_window
+from tools.img import rgb2yuv, yuv2rgb, tensor2ndarray, ndarray2tensor, dct_2d_3c_slide_window, idct_2d_3c_slide_window, \
+    idct_2d_3c_slide_window, dct_2d_3c_slide_window, dwt_2d_3c, idwt_2d_3c, fft_2d_3c, ifft_2d_3c
 from tools.ctrl_transform import ctrl
 
 import torch
@@ -50,7 +52,7 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str) -> torch.Tensor:
         magnitude = 30
         x_0 = tensor2ndarray(x_0)
         x_0 = rgb2yuv(x_0)
-        x_dct = dct_2d_slide_window(x_0, window_size)
+        x_dct = dct_2d_3c_slide_window(x_0, window_size)
         x_dct = np.transpose(x_dct, (2, 0, 1))
         for ch in channel_list:
             for w in range(0, x_dct.shape[1], window_size):
@@ -58,7 +60,7 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str) -> torch.Tensor:
                     for pos in pos_list:
                         x_dct[ch][w + pos[0], h + pos[1]] += magnitude
         x_dct = np.transpose(x_dct, (1, 2, 0))
-        x_idct = idct_2d_slide_window(x_dct, window_size)
+        x_idct = idct_2d_3c_slide_window(x_dct, window_size)
         x_idct = yuv2rgb(x_idct)
         return ndarray2tensor(x_idct)
     elif attack_name == 'lf':  # low frequency
@@ -133,5 +135,55 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str) -> torch.Tensor:
         return trans(x_0)
     elif attack_name == 'fiba':
         pass
+    elif attack_name == 'duba':
+        x_c = tensor2ndarray(x_0) / 255.  # scale to 0~1
+        x_p_img = PIL.Image.open('../resource/example/000001.jpg')
+        wave = 'db2'
+        alpha = beta = 0.4
+
+        # do 3-level dwt for x_c
+        x_c_re = np.zeros_like(x_c)
+        for i in range(3):  # 3 channel
+            L_1, (H_11, H_12, H_13) = pywt.dwt2(x_c[:, :, i], wave)
+            L_2, (H_21, H_22, H_23) = pywt.dwt2(L_1, wave)
+            L_3, (H_31, H_32, H_33) = pywt.dwt2(L_2, wave)
+
+            x_p1 = np.array(x_p_img.resize((L_1.shape[0], L_1.shape[1]))) / 255.
+            _, (HP_21, HP_22, HP_23) = pywt.dwt2(x_p1[:, :, i], wave)
+            x_p2 = np.array(x_p_img.resize((L_2.shape[0], L_2.shape[1]))) / 255.
+            _, (HP_31, HP_32, HP_33) = pywt.dwt2(x_p2[:, :, i], wave)
+
+            H_21 = beta * H_21 + (1 - beta) * HP_21
+            H_22 = beta * H_22 + (1 - beta) * HP_22
+            H_23 = beta * H_23 + (1 - beta) * HP_23
+
+            H_31 = alpha * H_31 + (1 - alpha) * HP_31
+            H_32 = alpha * H_32 + (1 - alpha) * HP_32
+            H_33 = alpha * H_33 + (1 - alpha) * HP_33
+
+            res_coe = [L_3, (H_31, H_32, H_33), (H_21, H_22, H_23), (H_11, H_12, H_13)]
+            x_c_re[:, :, i] = pywt.waverec2(coeffs=res_coe, wavelet=wave)
+
+        # exchange amplitude
+        x_c_f = fft_2d_3c(x_c)
+        x_re_f = fft_2d_3c(x_c_re)
+        clean_amplitude, clean_phase = np.abs(x_c_f), np.angle(x_c_f)
+        poison_amplitude, poison_phase = np.abs(x_re_f), np.angle(x_re_f)
+        x_re_f = clean_amplitude * np.exp(1j * poison_phase)
+        x_re = ifft_2d_3c(x_re_f).real
+
+        # dct smooth
+        lamb = 0.7
+        x_re_dct_1 = dct_2d_3c_slide_window(x_re.astype(float))
+        x_c_dct_1 = dct_2d_3c_slide_window(x_c.astype(float))
+        x_re_dct_2 = dct_2d_3c_slide_window(x_re_dct_1.astype(float))
+        x_c_dct_2 = dct_2d_3c_slide_window(x_c_dct_1.astype(float))
+        x_re_dct_2 = lamb * x_re_dct_2 + (1 - lamb) * x_c_dct_2
+        x_re_dct_1 = idct_2d_3c_slide_window(x_re_dct_2)
+        x_re_dct_1 = lamb * x_re_dct_1 + (1 - lamb) * x_c_dct_1
+        x_re = idct_2d_3c_slide_window(x_re_dct_1)
+
+        x_re = np.clip(x_re, 0, 1)
+        return ndarray2tensor(x_re * 255.)
     else:
         raise NotImplementedError(attack_name)
