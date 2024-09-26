@@ -6,6 +6,12 @@ import torch
 from matplotlib import pyplot as plt
 import cv2
 from scipy.fftpack import dct, idct
+from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import peak_signal_noise_ratio as psnr
+
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from pytorch_grad_cam.utils.image import show_cam_on_image
 
 
 def ndarray2tensor(nd: np.ndarray) -> torch.Tensor:
@@ -26,7 +32,7 @@ def tensor2ndarray(t: torch.Tensor) -> np.ndarray:
     :return: a numpy array, e.g., with shape (32, 32, 3)
     """
     # Permute the tensor to swap back to (H, W, C) from (C, H, W)
-    nd = (t * 255.).cpu().permute(1, 2, 0).numpy().astype(np.uint8)
+    nd = (t * 255.).detach().cpu().permute(1, 2, 0).numpy().astype(np.uint8)
     return nd
 
 
@@ -131,14 +137,14 @@ def idwt_2d_3c(coeffs: list, wavelet='haar') -> np.ndarray:
 def fft_2d_3c(x_0: np.ndarray):
     x_f = []
     for i in range(3):
-        x_f.append(np.fft.fft(x_0[:, :, i]))
+        x_f.append(np.fft.fft2(x_0[:, :, i]))
     x_f = np.stack(x_f, axis=2)
     return x_f
 
 def ifft_2d_3c(x_0: np.ndarray):
     x_i = []
     for i in range(3):
-        x_i.append(np.fft.ifft(x_0[:, :, i]))
+        x_i.append(np.fft.ifft2(x_0[:, :, i]))
     x_i = np.stack(x_i, axis=2)
     return x_i
 
@@ -216,3 +222,4 @@ def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x
     fig.colorbar(im2, cax=cbar_ax)
     plt.tight_layout()
     plt.show()
+

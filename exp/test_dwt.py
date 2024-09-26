@@ -14,12 +14,8 @@ titles = ['Approximation', ' Horizontal detail',
 img = PIL.Image.open('../data/celeba/img_align_celeba/000001.jpg')
 trans = Compose([Resize((224, 224)), np.array])
 img = trans(img) / 255.
-coeff = pywt.wavedec2(img, wavelet, level=3)
-[cl,(cH3,cV3,cD3),(cH2,cV2,cD2),(cH1,cV1,cD1)] = coeff
-
-
-
-img_reconstructed = pywt.idwt2(coeffs=(LL, (LH, HL, HH)), wavelet=wavelet)
+LL,(LH,HL,HH) = dwt_2d_3c(img, wavelet)
+img_reconstructed = idwt_2d_3c(coeffs=(LL, (LH, HL, HH)), wavelet=wavelet)
 
 fig = plt.figure(figsize=(12, 3))
 for i, a in enumerate([LL, LH, HL, HH, img_reconstructed]):
@@ -31,4 +27,4 @@ for i, a in enumerate([LL, LH, HL, HH, img_reconstructed]):
 
 fig.tight_layout()
 plt.show()
-print((img - img_reconstructed).sum())
+print((img - img_reconstructed).mean())

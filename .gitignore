@@ -1,5 +1,9 @@
 data/
+exp/lightning_logs
 .idea/
+outputs/
+results/
+*/outputs
 .DS_Store
 
 

@@ -44,7 +44,7 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str) -> torch.Tensor:
     elif attack_name == 'noise':
         factor = 0.05
         x_0 = (1 - factor) * x_0 + factor * torch.randn_like(x_0, device=x_0.device)
-        return x_0
+        return torch.clip(x_0, 0, 1)
     elif attack_name == 'ftrojan':
         channel_list = [1, 2]
         window_size = 32
@@ -172,7 +172,7 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str) -> torch.Tensor:
         x_re_f = clean_amplitude * np.exp(1j * poison_phase)
         x_re = ifft_2d_3c(x_re_f).real
 
-        # dct smooth
+        # blend DCT frequency
         lamb = 0.7
         x_re_dct_1 = dct_2d_3c_slide_window(x_re.astype(float))
         x_c_dct_1 = dct_2d_3c_slide_window(x_c.astype(float))
@@ -185,5 +185,18 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str) -> torch.Tensor:
 
         x_re = np.clip(x_re, 0, 1)
         return ndarray2tensor(x_re * 255.)
+    elif attack_name == 'inba':
+        x = tensor2ndarray(x_0)
+        wind = 2
+        x_yuv = rgb2yuv(x)
+        x_y = np.fft.fft2(x_yuv[:, :, 1])
+        imag_part = x_y.imag
+        imag_part[0:wind, 0:wind] = 0
+        x_y = x_y.real + imag_part * 1j
+        x_yuv[:, :, 1] = np.fft.ifft2(x_y).real
+        x_re = yuv2rgb(x_yuv)
+        x_re = ndarray2tensor(x_re)
+        x_re = torch.clip(x_re, 0, 1)
+        return x_re
     else:
         raise NotImplementedError(attack_name)
