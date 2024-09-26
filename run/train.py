@@ -99,7 +99,7 @@ def train_mdoel(config: DictConfig):
     poison_train_dl = DataLoader(dataset=List2Dataset(poison_train_list), batch_size=batch, shuffle=True, num_workers=nw)
     poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), batch_size=batch, shuffle=True, num_workers=nw)
     model = MyLightningModule(net, lr, momentum, weight_decay)
-    trainer = L.Trainer(max_epochs=epoch, devices=[0], default_root_dir=f'../results/{dataset_name}/{attack_name}/{now()}')
+    trainer = L.Trainer(max_epochs=epoch, devices=[0], default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=poison_train_dl)
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
