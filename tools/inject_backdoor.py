@@ -18,9 +18,10 @@ import torchvision
 from torchvision.transforms.transforms import ToTensor, Resize, Compose
 from PIL import Image
 import torch.nn.functional as F
+from omegaconf import OmegaConf, DictConfig
 
 
-def patch_trigger(x_0: torch.Tensor, attack_name: str) -> torch.Tensor:
+def patch_trigger(x_0: torch.Tensor, attack_name: str, attack_config: DictConfig=None) -> torch.Tensor:
     """
     add a trigger to the original image given attack method
     :param x_0:
@@ -187,7 +188,7 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str) -> torch.Tensor:
         return ndarray2tensor(x_re * 255.)
     elif attack_name == 'inba':
         x = tensor2ndarray(x_0)
-        wind = 2
+        wind = 2 if attack_config == None else attack_config.wind
         x_yuv = rgb2yuv(x)
         x_y = np.fft.fft2(x_yuv[:, :, 1])
         imag_part = x_y.imag

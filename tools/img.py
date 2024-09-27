@@ -149,6 +149,28 @@ def ifft_2d_3c(x_0: np.ndarray):
     return x_i
 
 
+def rgb_to_yuv(R,G,B):
+    """
+    Converts an RGB image to YUV using the BT.601 standard.
+    watch out: 
+    1. R, G, B shold in (0, 255), float or integer are alright.
+    2. Y, U, V need CLIP operation!
+    """
+    Y = 0.299 * R + 0.587 * G + 0.114 * B
+    U = (B - Y) * 0.492 + 128
+    V = (R - Y) * 0.877 + 128
+    return Y,U,V
+
+def yuv_to_rgb(Y, U, V):
+    """
+    Converts a YUV image back to RGB using the BT.601 standard.
+    """
+    R = Y + 1.140 * (V - 128)
+    G = Y - 0.394 * (U - 128) - 0.581 * (V - 128)
+    B = Y + 2.032 * (U - 128)
+    
+    return R, G, B
+
 def rgb2yuv(x_rgb: numpy.ndarray) -> numpy.ndarray:
     """
     this function converts RGB image to YUV image both a single image and a batch
@@ -222,4 +244,6 @@ def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x
     fig.colorbar(im2, cax=cbar_ax)
     plt.tight_layout()
     plt.show()
+
+
 
