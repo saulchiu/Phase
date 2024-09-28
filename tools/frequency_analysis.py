@@ -15,7 +15,7 @@ from skimage.metrics import peak_signal_noise_ratio
 
 
 if __name__ == '__main__':
-    dataset_name = 'cifar10'
+    dataset_name = 'gtsrb'
     attack = 'inba'
     device = 'cpu'
     visible_tf = 'dct'
@@ -31,7 +31,7 @@ if __name__ == '__main__':
         x_space = batch[i]  # this is a tensor
         x_space_poison = patch_trigger(x_space, attack)  # tensor too
         x_space, x_space_poison = tensor2ndarray(x_space), tensor2ndarray(x_space_poison)
-        ssim += structural_similarity(x_space, x_space_poison, win_size=3, data_range=1)
+        ssim += structural_similarity(x_space, x_space_poison, win_size=3)
         psnr += peak_signal_noise_ratio(x_space, x_space_poison)
         # x_space, x_space_poison = rgb2yuv(x_space), rgb2yuv(x_space_poison)
         
@@ -65,5 +65,4 @@ if __name__ == '__main__':
     x_f = res_before
     x_f_poison = res_after
     plot_space_target_space(x_space, x_f, x_space_poison, x_f_poison, is_clip=True)
-    print((res_after - res_before).mean())
     print(f'ssim: {ssim:.2f}, psnr: {psnr:.2f}')

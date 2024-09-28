@@ -72,3 +72,34 @@ def get_dataset_normalization(dataset_name):
     else:
         raise NotImplementedError(dataset_name)
     return dataset_normalization
+
+class DeNormalize(torch.nn.Module):
+    def __init__(self, mean, std):
+        super().__init__()
+        self.mean = torch.tensor(mean)
+        self.std = torch.tensor(std)
+
+    def forward(self, tensor):
+        # 反标准化：tensor * std + mean
+        mean = self.mean.to(tensor.device)[None, :, None, None]
+        std = self.std.to(tensor.device)[None, :, None, None]
+        return tensor * std + mean
+
+def get_de_normalization(dataset_name):
+    if dataset_name == "cifar10":
+        dataset_de_normalization = DeNormalize([0.4914, 0.4822, 0.4465], [0.247, 0.243, 0.261])
+    elif dataset_name == "gtsrb" or dataset_name == "celeba":
+        dataset_de_normalization = DeNormalize([0, 0, 0], [1, 1, 1])
+    elif dataset_name == 'cifar100':
+        dataset_de_normalization = DeNormalize([0.5071, 0.4865, 0.4409], [0.2673, 0.2564, 0.2762])
+    elif dataset_name == "mnist":
+        dataset_de_normalization = DeNormalize([0.5], [0.5])
+    elif dataset_name == 'tiny':
+        dataset_de_normalization = DeNormalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262])
+    elif dataset_name == 'imagenet':
+        dataset_de_normalization = DeNormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    elif dataset_name == 'imagenette':
+        dataset_de_normalization = DeNormalize(mean=[0.4648, 0.4543, 0.4247], std=[0.2785, 0.2735, 0.2944])
+    else:
+        raise NotImplementedError(dataset_name)
+    return dataset_de_normalization
