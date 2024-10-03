@@ -10,6 +10,7 @@ path: None
 device: 0
 batch: 128
 model: resnet18
+seed: 42
 
 defaults:
   - attack: inba

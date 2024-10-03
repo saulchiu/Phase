@@ -109,11 +109,12 @@ class INBALightningModule(L.LightningModule):
     def on_train_epoch_end(self):
         if self.extra_epochs > 0:
             self.extra_epochs -= 1
-        else:
+        elif self.extra_epochs == 0:
             print('-----start train model-----')
             self.model.load_state_dict(self.model_state_dict_backup)
             self.param_opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
+            self.extra_epochs = -1
         self.scheduler.step()
 
 

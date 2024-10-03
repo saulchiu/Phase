@@ -113,7 +113,7 @@ def get_de_normalization(dataset_name):
     return dataset_de_normalization
 
 
-def get_transform(dataset_name, size, train=True, random_crop_padding=4):
+def get_benign_transform(dataset_name, size, train=True, random_crop_padding=4):
     trans_list = [Resize((size, size))]
     if train:
         trans_list.append(RandomCrop((size, size), padding=random_crop_padding))

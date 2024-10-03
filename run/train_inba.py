@@ -27,18 +27,16 @@ import yaml
 from pytorch_lightning.loggers import CSVLogger
 from tools.img import rgb_to_yuv, yuv_to_rgb
 from skimage.metrics import structural_similarity
-from tools.dataset import get_de_normalization, get_dataset_normalization, get_transform
+from tools.dataset import get_de_normalization, get_dataset_normalization, get_benign_transform
 from repvgg_pytorch.repvgg import RepVGG
 from torchvision.models.convnext import ConvNeXt, CNBlockConfig
-
-seed = 42
-random.seed(seed)
-np.random.seed(seed)
-torch.manual_seed(seed)
-torch.cuda.manual_seed_all(seed)
+from tools.utils import manual_seed
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
+    seed = config.seed
+    manual_seed(seed)
+    
     ratio = config.ratio
     dataset_name = config.dataset_name
     attack_name = config.attack.name
@@ -68,28 +66,28 @@ def train_mdoel(config: DictConfig):
     if dataset_name == 'imagenette':
         scale = 224
         num_classes = 10
-        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_benign_transform(dataset_name, scale, train=False))
     elif dataset_name == 'cifar10':
         num_classes = 10
         scale = 32
-        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_benign_transform(dataset_name, scale, train=False))
     elif dataset_name == 'gtsrb':
         num_classes = 43
         scale = 32
-        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_benign_transform(dataset_name, scale, train=False))
     elif dataset_name == 'fer2013':
         num_classes = 8
         scale = 64
-        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_benign_transform(dataset_name, scale, train=False))
     elif dataset_name == 'rafdb':
         num_classes = 7
         scale = 64
-        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, scale, train=False))
     else:
         raise NotImplementedError(dataset_name)
     train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw)

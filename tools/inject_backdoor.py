@@ -21,6 +21,7 @@ from PIL import Image
 import torch.nn.functional as F
 from omegaconf import OmegaConf, DictConfig
 import random
+from tools.dataset import get_de_normalization
 
 
 def patch_trigger(x_0: torch.Tensor, attack_name: str, args=None) -> torch.Tensor:

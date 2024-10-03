@@ -12,9 +12,9 @@ from tools.img import fft_2d_3c, ifft_2d_3c
 import pytorch_lightning as L
 from tools.dataset import List2Dataset
 import numpy as np
-from tools.dataset import get_dataset_normalization
+from tools.dataset import get_dataset_normalization, get_de_normalization
 from tools.inject_backdoor import patch_trigger
-from tools.dataset import get_dataloader, get_transform
+from tools.dataset import get_dataloader, get_benign_transform
 import torch.nn.functional as F
 import cv2
 from models.cnn_lightning_model import MyLightningModule
@@ -25,11 +25,13 @@ import os
 import shutil
 import yaml
 from pytorch_lightning.loggers import CSVLogger
-
-_ = torch.manual_seed(42)
+from tools.utils import manual_seed
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
+    seed = config.seed
+    manual_seed(seed)
+
     ratio = config.ratio
     dataset_name = config.dataset_name
     attack_name = config.attack.name
@@ -54,28 +56,28 @@ def train_mdoel(config: DictConfig):
     if dataset_name == 'imagenette':
         scale = 224
         num_classes = 10
-        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_benign_transform(dataset_name, scale, train=False))
     elif dataset_name == 'cifar10':
         num_classes = 10
         scale = 32
-        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_benign_transform(dataset_name, scale, train=False))
     elif dataset_name == 'gtsrb':
         num_classes = 43
         scale = 32
-        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_benign_transform(dataset_name, scale, train=False))
     elif dataset_name == 'fer2013':
         num_classes = 8
         scale = 64
-        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_benign_transform(dataset_name, scale, train=False))
     elif dataset_name == 'rafdb':
         num_classes = 7
         scale = 64
-        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_transform(dataset_name, scale, train=False))
+        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_benign_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, scale, train=False))
     else:
         raise NotImplementedError(dataset_name)
     train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw)
@@ -84,7 +86,7 @@ def train_mdoel(config: DictConfig):
     for x, y in iter(train_dl):
         for i in range(x.shape[0]):
             if random.random() < ratio and attack_name != 'benign':  # craft poison data
-                x_re = patch_trigger(x[i], attack_name, config.attack)
+                x_re = patch_trigger(get_de_normalization(dataset_name)(x[i]), attack_name, config.attack)
                 x[i] = x_re
                 y[i] = target_label
             poison_train_list.append((x[i], y[i]))
@@ -95,7 +97,7 @@ def train_mdoel(config: DictConfig):
             for i in range(x.shape[0]):
                 if y[i] == target_label:
                     continue
-                x_re = patch_trigger(x[i], attack_name)
+                x_re = patch_trigger(get_de_normalization(dataset_name)(x[i]), attack_name)
                 x[i] = x_re
                 y[i] = target_label
                 poison_test_list.append((x[i], y[i]))
