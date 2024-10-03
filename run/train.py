@@ -13,7 +13,7 @@ import pytorch_lightning as L
 from tools.dataset import List2Dataset
 import numpy as np
 from tools.dataset import get_dataset_normalization, get_de_normalization
-from tools.inject_backdoor import patch_trigger
+from tools.inject_backdoor import patch_trigger 
 from tools.dataset import get_dataloader, get_benign_transform
 import torch.nn.functional as F
 import cv2
