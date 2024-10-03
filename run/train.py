@@ -14,7 +14,7 @@ from tools.dataset import List2Dataset
 import numpy as np
 from tools.dataset import get_dataset_normalization
 from tools.inject_backdoor import patch_trigger
-from tools.dataset import get_dataloader
+from tools.dataset import get_dataloader, get_transform
 import torch.nn.functional as F
 import cv2
 from models.cnn_lightning_model import MyLightningModule
@@ -50,28 +50,32 @@ def train_mdoel(config: DictConfig):
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
 
-    norm = get_dataset_normalization(dataset_name)
+    batch = config.batch
     if dataset_name == 'imagenette':
-        batch = 64
         scale = 224
         num_classes = 10
-        trans = Compose([ToTensor(), Resize((scale, scale)), norm])
-        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=trans)
-        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=trans)
+        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_transform(dataset_name, scale, train=False))
     elif dataset_name == 'cifar10':
         num_classes = 10
-        batch = 128
         scale = 32
-        trans = Compose([ToTensor(), Resize((scale, scale)), norm])
-        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=trans)
-        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=trans)
-    elif dataset_name == 'gtsrb':  # bad performance
+        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_transform(dataset_name, scale, train=False))
+    elif dataset_name == 'gtsrb':
         num_classes = 43
-        batch = 128
         scale = 32
-        trans = Compose([ToTensor(), Resize((scale, scale)), norm])
-        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=trans)
-        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=trans)
+        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_transform(dataset_name, scale, train=False))
+    elif dataset_name == 'fer2013':
+        num_classes = 8
+        scale = 64
+        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_transform(dataset_name, scale, train=False))
+    elif dataset_name == 'rafdb':
+        num_classes = 7
+        scale = 64
+        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_transform(dataset_name, scale, train=False))
     else:
         raise NotImplementedError(dataset_name)
     train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw)
@@ -79,22 +83,23 @@ def train_mdoel(config: DictConfig):
     poison_train_list = []
     for x, y in iter(train_dl):
         for i in range(x.shape[0]):
-            if random.random() < ratio:  # craft poison data
+            if random.random() < ratio and attack_name != 'benign':  # craft poison data
                 x_re = patch_trigger(x[i], attack_name, config.attack)
                 x[i] = x_re
                 y[i] = target_label
             poison_train_list.append((x[i], y[i]))
 
     poison_test_list = []
-    for x, y in iter(test_dl):
-        for i in range(x.shape[0]):
-            if y[i] == target_label:
-                continue
-            x_re = patch_trigger(x[i], attack_name)
-            x[i] = x_re
-            y[i] = target_label
-            poison_test_list.append((x[i], y[i]))
-    print(len(poison_train_list), len(poison_test_list))
+    if attack_name != 'benign':
+        for x, y in iter(test_dl):
+            for i in range(x.shape[0]):
+                if y[i] == target_label:
+                    continue
+                x_re = patch_trigger(x[i], attack_name)
+                x[i] = x_re
+                y[i] = target_label
+                poison_test_list.append((x[i], y[i]))
+        print(len(poison_train_list), len(poison_test_list))
 
     net = PreActResNet18(num_classes=num_classes).to('cuda:0')
     poison_train_dl = DataLoader(dataset=List2Dataset(poison_train_list), batch_size=batch, shuffle=True, num_workers=nw)
@@ -102,11 +107,12 @@ def train_mdoel(config: DictConfig):
     model = MyLightningModule(net, lr, momentum, weight_decay)
     logger = CSVLogger(save_dir=target_folder, name='log')
     trainer = L.Trainer(max_epochs=epoch, devices=[0], logger=logger, default_root_dir=target_folder, check_val_every_n_epoch=10)
-    trainer.fit(model=model, train_dataloaders=poison_train_dl, val_dataloaders=test_dl)
+    trainer.fit(model=model, train_dataloaders=poison_train_dl)
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
-    print('----------poison----------')
-    trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
+    if attack_name != 'benign':
+        print('----------poison----------')
+        trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
 
 
 

@@ -3,7 +3,7 @@ import sys
 sys.path.append('../')
 from models.preact_resnet import PreActResNet18
 import torchvision
-from torchvision.transforms.transforms import ToTensor, Resize, Compose
+from torchvision.transforms.transforms import ToTensor, Resize, Compose, RandomCrop
 import torch
 from torch.utils.data.dataloader import DataLoader
 import random
@@ -27,10 +27,15 @@ import yaml
 from pytorch_lightning.loggers import CSVLogger
 from tools.img import rgb_to_yuv, yuv_to_rgb
 from skimage.metrics import structural_similarity
-from tools.dataset import get_de_normalization, get_dataset_normalization
+from tools.dataset import get_de_normalization, get_dataset_normalization, get_transform
+from repvgg_pytorch.repvgg import RepVGG
+from torchvision.models.convnext import ConvNeXt, CNBlockConfig
 
-_ = torch.manual_seed(42)
-
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
@@ -40,15 +45,16 @@ def train_mdoel(config: DictConfig):
     target_label = config.target_label
     nw = config.num_workers
     epoch = config.epoch
-    lr = config.lr
-    momentum = config.momentum
-    weight_decay = config.weight_decay
+    if ratio > 0:
+        epoch += int(epoch / 10)
     wind = config.attack.wind
     device = config.device
 
     # save config, and source file
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     target_folder = f'../results/{dataset_name}/{attack_name}/{now()}' if config.path == 'None' else config.path
+    config.path = target_folder
+    print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     train_target_path = os.path.join(target_folder, 'train.py')
@@ -57,40 +63,80 @@ def train_mdoel(config: DictConfig):
     shutil.copy('../models/cnn_lightning_model.py', train_target_path)
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
-
-    norm = get_dataset_normalization(dataset_name)
+    
+    batch = config.batch
     if dataset_name == 'imagenette':
-        batch = 64
         scale = 224
         num_classes = 10
-        trans = Compose([ToTensor(), Resize((scale, scale)), norm])
-        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=trans)
-        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=trans)
+        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_transform(dataset_name, scale, train=False))
     elif dataset_name == 'cifar10':
         num_classes = 10
-        batch = 128
         scale = 32
-        trans = Compose([ToTensor(), Resize((scale, scale)), norm])
-        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=trans)
-        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=trans)
-    elif dataset_name == 'gtsrb':  # bad performance
+        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_transform(dataset_name, scale, train=False))
+    elif dataset_name == 'gtsrb':
         num_classes = 43
-        batch = 128
         scale = 32
-        trans = Compose([ToTensor(), Resize((scale, scale)), norm])
-        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=trans)
-        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=trans)
+        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_transform(dataset_name, scale, train=False))
+    elif dataset_name == 'fer2013':
+        num_classes = 8
+        scale = 64
+        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_transform(dataset_name, scale, train=False))
+    elif dataset_name == 'rafdb':
+        num_classes = 7
+        scale = 64
+        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_transform(dataset_name, scale))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_transform(dataset_name, scale, train=False))
     else:
         raise NotImplementedError(dataset_name)
     train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw)
     test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw)
-    net = PreActResNet18(num_classes=num_classes).to(f'cuda:{device}')
+
+    if config.model == "resnet18":
+        net = PreActResNet18(num_classes=num_classes).to(f'cuda:{device}')
+    elif config.model == "repvgg":
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[0.75, 0.75, 0.75, 2.5]).to(device=f'cuda:{device}')
+    elif config.model == "convnext":
+        if dataset_name == 'cifar10':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.1
+        elif dataset_name == 'imagenette':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.2
+        elif dataset_name == 'gtsrb':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.3
+        elif dataset_name == 'fer2013':
+            channel_list = [64, 128, 256, 512]
+            stochastic_depth_prob = 0.1
+        else:
+            raise NotImplementedError(dataset_name)
+        block_setting = [
+            CNBlockConfig(input_channels=channel_list[0], out_channels=channel_list[1], num_layers=3),
+            CNBlockConfig(input_channels=channel_list[1], out_channels=channel_list[2], num_layers=3),
+            CNBlockConfig(input_channels=channel_list[2], out_channels=channel_list[3], num_layers=9),
+            CNBlockConfig(input_channels=channel_list[3], out_channels=None, num_layers=3)
+        ]
+        net = ConvNeXt(
+            block_setting=block_setting,
+            stochastic_depth_prob=stochastic_depth_prob,  # Lower stochastic depth for a small dataset
+            layer_scale=1e-6,
+            num_classes=num_classes
+        )
+    else:
+        raise NotImplementedError(config.model)
+
     model = INBALightningModule(net, config)
     # tg_before = model.trigger
     tg_before = model.trigger.detach().clone()
     logger = CSVLogger(save_dir=target_folder, name='log')
     trainer = L.Trainer(max_epochs=epoch, devices=[device], logger=logger, default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=train_dl)
+    if config.model == "repvgg":
+        model.model.deploy =True
     model.eval()
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance

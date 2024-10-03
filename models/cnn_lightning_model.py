@@ -55,7 +55,7 @@ class MyLightningModule(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
         return {
             'optimizer': optimizer,
             "lr_scheduler": {
@@ -67,7 +67,7 @@ class MyLightningModule(L.LightningModule):
 
 
 class INBALightningModule(L.LightningModule):
-    def __init__(self, model, config):
+    def __init__(self, model: torch.nn.Module, config):
         super().__init__()
         self.config = config
         self.model = model
@@ -86,19 +86,38 @@ class INBALightningModule(L.LightningModule):
         self.validation_step_outputs = []
         self.cur_val_loss = 0.
         self.cur_val_acc = 0.
+
+        self.extra_epochs  =int(self.config.epoch / 10)
+        self.reset_epoch_flag = False
+
+        self.model_state_dict_backup = model.state_dict()
+        self.tg_opt = torch.optim.SGD([self.trigger], lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        self.param_opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
     
     def init_trigger(self):
-        tg_space = torch.randn((self.wind, self.wind), device=self.device)
-        tg_fft = torch.fft.fft2(tg_space)
+        print('-----train trigger first-----')
+        tg_spatial = torch.randn((self.wind, self.wind), device=self.device)
+        tg_fft = torch.fft.fft2(tg_spatial)
         tg_fft_imag = torch.imag(tg_fft)
         tg_fft_imag.requires_grad_(True)
         return tg_fft_imag
 
     def forward(self, x):
         return self.model(x)
+    
+    def on_train_epoch_end(self):
+        if self.extra_epochs > 0:
+            self.extra_epochs -= 1
+        else:
+            print('-----start train model-----')
+            self.model.load_state_dict(self.model_state_dict_backup)
+            self.param_opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
+        self.scheduler.step()
+
 
     def training_step(self, batch):
-        param_opt, trigger_opt = self.optimizers()
         x, y = batch
         x_list = []
         for i in range(x.shape[0]):
@@ -126,19 +145,19 @@ class INBALightningModule(L.LightningModule):
                 y[i] = self.target_label
                 x_list.append(x[i])
 
-        if len(x_list) > 0 and self.current_epoch < int(self.config / 2):
+        # if poison rate is 0, never into this loop
+        if len(x_list) > 0 and self.extra_epochs > 0:
             x_list = torch.stack(x_list, dim=0)
             y_list = (torch.zeros(size=(x_list.shape[0],), device=x_list.device) + self.target_label).long()
             loss_poison = torch.nn.functional.cross_entropy(self.forward(x_list), y_list)
-            trigger_opt.zero_grad()
+            self.tg_opt.zero_grad()
             self.manual_backward(loss_poison, retain_graph=True)
-            trigger_opt.step()
-
+            self.tg_opt.step()
         y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
-        param_opt.zero_grad()
+        self.param_opt.zero_grad()
         self.manual_backward(loss)
-        param_opt.step()
+        self.param_opt.step()
         # return loss
     
     def validation_step(self, batch):
@@ -167,19 +186,20 @@ class INBALightningModule(L.LightningModule):
         return {"test_loss": loss, "test_accuracy": accuracy}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
-        trigger_optimizer = torch.optim.SGD([self.trigger], lr=self.lr * 10, momentum=self.momentum, weight_decay=self.weight_decay)
-        return (
-            {
-                'optimizer': optimizer,
-                "lr_scheduler": {
-                        "scheduler": scheduler,
-                        "monitor": self.cur_val_acc,
-                        "frequency": 5,
-                        },
-            },
-            {
-                'optimizer': trigger_optimizer
-            }
-        )
+        # optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+        # trigger_optimizer = torch.optim.SGD([self.trigger], lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        # return (
+        #     {
+        #         'optimizer': optimizer,
+        #         "lr_scheduler": {
+        #                 "scheduler": scheduler,
+        #                 "monitor": self.cur_val_acc,
+        #                 "frequency": 5,
+        #                 },
+        #     },
+        #     {
+        #         'optimizer': trigger_optimizer
+        #     }
+        # )
+        return None

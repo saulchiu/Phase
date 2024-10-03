@@ -23,7 +23,7 @@ from omegaconf import OmegaConf, DictConfig
 import random
 
 
-def patch_trigger(x_0: torch.Tensor, attack_name: str, config: DictConfig=None) -> torch.Tensor:
+def patch_trigger(x_0: torch.Tensor, attack_name: str, args=None) -> torch.Tensor:
     """
     add a trigger to the original image given attack method
     :param x_0:
@@ -38,8 +38,8 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str, config: DictConfig=None) 
         x_0 = x_0 * 0.8 + tg * 0.2
         return x_0
     elif attack_name == 'badnet':
-        tg = Image.open(f'../resource/badnet/trigger_{h}_3.png')
-        mask = Image.open(f'../resource/badnet/mask_{h}_3.png')
+        tg = Image.open(f'../resource/badnet/trigger_{h}_{int(h / 10)}.png')
+        mask = Image.open(f'../resource/badnet/mask_{h}_{int(h / 10)}.png')
         tg = trans(tg)
         mask = trans(mask)
         x_0 = (1 - mask) * x_0 + tg * mask
@@ -202,15 +202,18 @@ def patch_trigger(x_0: torch.Tensor, attack_name: str, config: DictConfig=None) 
         # x_re = ndarray2tensor(x_re)
         # x_re = torch.clip(x_re, 0, 1)
         # return x_re
+        config = args.__dict__['config']
         x_torch = x_0.detach().clone()
         x_torch *= 255.
         x_yuv = torch.stack(rgb_to_yuv(x_torch[0], x_torch[1], x_torch[2]), dim=0)
         x_yuv = torch.clip(x_yuv, 0, 255)
-        tg: torch.tensor = torch.load('../results/gtsrb/inba/20240928135130/trigger.pth')["tg_after"]
+        tg: torch.tensor = torch.load(f'{config.path}/trigger.pth')["tg_after"]
 
         # inject trigger
+        # tg_size = config.attack.wind
+        # tg_pos = random.randint(0, tg_size)
         tg_size = config.attack.wind
-        tg_pos = random.randint(0, tg_size)
+        tg_pos = 0
         x_fft = torch.fft.fft2(x_yuv[1])
         x_imag = torch.imag(x_fft)
         x_imag[tg_pos:(tg_pos + tg_size), tg_pos:(tg_pos + tg_size)] = tg

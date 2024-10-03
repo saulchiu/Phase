@@ -2,12 +2,14 @@ ratio: 0.1
 dataset_name: cifar10
 target_label: 0
 num_workers: 11
-epoch: 100
+epoch: 200
 lr: 1e-2
 momentum: 0.9
 weight_decay: 5e-4
 path: None
 device: 0
+batch: 128
+model: resnet18
 
 defaults:
   - attack: inba

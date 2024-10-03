@@ -12,12 +12,14 @@ from tools.img import ndarray2tensor
 from tools.frft import FRFT
 from skimage.metrics import structural_similarity
 from skimage.metrics import peak_signal_noise_ratio
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 
 if __name__ == '__main__':
-    dataset_name = 'gtsrb'
+    dataset_name = 'rafdb'
     attack = 'inba'
-    device = 'cpu'
+    device = 'cpu' 
     visible_tf = 'dct'
     total = 128
     scale, trans, dl = get_dataloader(dataset_name, total)
@@ -27,9 +29,25 @@ if __name__ == '__main__':
     batch = batch.to(device=device)
     ssim = 0.
     psnr = 0.
+
+    class Args():
+        pass
+    
+    args = Args()
+
+    if attack == 'inba':
+        # load config
+        target_folder = '../' + 'results/rafdb/inba/20240929181151'
+        path = f'{target_folder}/config.yaml'
+        config = OmegaConf.load(path)
+        args.__dict__ = {
+            'config': config
+        }
+
+
     for i in tqdm(range(total)):
         x_space = batch[i]  # this is a tensor
-        x_space_poison = patch_trigger(x_space, attack)  # tensor too
+        x_space_poison = patch_trigger(x_space, attack, args=args)  # tensor too
         x_space, x_space_poison = tensor2ndarray(x_space), tensor2ndarray(x_space_poison)
         ssim += structural_similarity(x_space, x_space_poison, win_size=3)
         psnr += peak_signal_noise_ratio(x_space, x_space_poison)

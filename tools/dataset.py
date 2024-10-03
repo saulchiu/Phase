@@ -1,9 +1,9 @@
-from torchvision.transforms.transforms import Compose, ToTensor, Resize, Normalize
+from torchvision.transforms.transforms import Compose, ToTensor, Resize, Normalize, RandomCrop, RandomHorizontalFlip
 from torch.utils.data.dataloader import DataLoader
 import torchvision
 
 
-def get_dataloader(dataset_name: str, batch_size: int) -> (int, Compose, DataLoader):
+def get_dataloader(dataset_name: str, batch_size: int):
     """
     given dataset name and batch size, return image scale, transform, dataloader
     :param batch_size:
@@ -31,8 +31,16 @@ def get_dataloader(dataset_name: str, batch_size: int) -> (int, Compose, DataLoa
         trans = Compose([ToTensor(), Resize((scale, scale))])
         ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=trans)
         dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
-    elif dataset_name == 'pubfig':
-        pass
+    elif dataset_name == 'fer2013':
+        scale = 64
+        trans = Compose([ToTensor(), Resize((scale, scale))])
+        ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=trans)
+        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
+    elif dataset_name == 'rafdb':
+        scale = 64
+        trans = Compose([ToTensor(), Resize((scale, scale))])
+        ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=trans)
+        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
     return scale, trans, dl
 
 import torch
@@ -56,7 +64,7 @@ def get_dataset_normalization(dataset_name):
     if dataset_name == "cifar10":
         # from wanet
         dataset_normalization = Normalize([0.4914, 0.4822, 0.4465], [0.247, 0.243, 0.261])
-    elif dataset_name == "gtsrb" or dataset_name == "celeba":
+    elif dataset_name in ["gtsrb", "celeba", 'fer2013', 'rafdb']:
         dataset_normalization = Normalize([0, 0, 0], [1, 1, 1])
     elif dataset_name == 'cifar100':
         dataset_normalization = Normalize([0.5071, 0.4865, 0.4409], [0.2673, 0.2564, 0.2762])
@@ -88,7 +96,7 @@ class DeNormalize(torch.nn.Module):
 def get_de_normalization(dataset_name):
     if dataset_name == "cifar10":
         dataset_de_normalization = DeNormalize([0.4914, 0.4822, 0.4465], [0.247, 0.243, 0.261])
-    elif dataset_name == "gtsrb" or dataset_name == "celeba":
+    elif dataset_name in ["gtsrb", "celeba", 'fer2013', 'rafdb']:
         dataset_de_normalization = DeNormalize([0, 0, 0], [1, 1, 1])
     elif dataset_name == 'cifar100':
         dataset_de_normalization = DeNormalize([0.5071, 0.4865, 0.4409], [0.2673, 0.2564, 0.2762])
@@ -103,3 +111,14 @@ def get_de_normalization(dataset_name):
     else:
         raise NotImplementedError(dataset_name)
     return dataset_de_normalization
+
+
+def get_transform(dataset_name, size, train=True, random_crop_padding=4):
+    trans_list = [Resize((size, size))]
+    if train:
+        trans_list.append(RandomCrop((size, size), padding=random_crop_padding))
+        if dataset_name == 'cifar10':
+            trans_list.append(RandomHorizontalFlip())
+    trans_list.append(ToTensor())
+    trans_list.append(get_dataset_normalization(dataset_name))
+    return Compose(trans_list)
