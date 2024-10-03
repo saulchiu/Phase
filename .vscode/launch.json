@@ -10,7 +10,8 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/exp"
+            "cwd": "${workspaceFolder}/exp",
+            "args": ["ratio=0.05", "attack=badnet"]
         }
     ]
 }

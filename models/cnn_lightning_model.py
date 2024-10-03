@@ -8,12 +8,12 @@ from skimage.metrics import structural_similarity
 from tools.dataset import get_de_normalization
 
 class MyLightningModule(L.LightningModule):
-    def __init__(self, model, lr, momentum, weight_decay):
+    def __init__(self, model, config):
         super().__init__()
         self.model = model
-        self.lr = lr
-        self.momentum = momentum
-        self.weight_decay = weight_decay
+        self.lr = config.lr
+        self.momentum = config.momentum
+        self.weight_decay = config.weight_decay
         self.validation_step_outputs = []
         self.cur_val_loss = 0.
         self. cur_val_acc = 0.
@@ -21,6 +21,9 @@ class MyLightningModule(L.LightningModule):
 
     def forward(self, x):
         return self.model(x)
+
+    def on_train_epoch_end(self):
+        pass
 
     def training_step(self, batch):
         x, y = batch
@@ -61,7 +64,7 @@ class MyLightningModule(L.LightningModule):
             "lr_scheduler": {
                         "scheduler": scheduler,
                         "monitor": self.cur_val_acc,
-                        "frequency": 5,
+                        "frequency": 1,
                     },
         }
 
@@ -75,8 +78,6 @@ class INBALightningModule(L.LightningModule):
         self.momentum = config.momentum
         self.weight_decay = config.weight_decay
         self.poison_rate = config.ratio
-        self.wind = config.attack.wind
-        # self.trigger = torch.randn(size=(self.wind, self.wind), requires_grad=True)
         self.trigger = torch.nn.Parameter(self.init_trigger())
         self.target_label = config.target_label
         self.dataset_name = config.dataset_name
@@ -97,7 +98,7 @@ class INBALightningModule(L.LightningModule):
     
     def init_trigger(self):
         print('-----train trigger first-----')
-        tg_spatial = torch.randn((self.wind, self.wind), device=self.device)
+        tg_spatial = torch.randn((self.config.attack.wind, self.config.attack.wind), device=self.device)
         tg_fft = torch.fft.fft2(tg_spatial)
         tg_fft_imag = torch.imag(tg_fft)
         tg_fft_imag.requires_grad_(True)
@@ -124,11 +125,9 @@ class INBALightningModule(L.LightningModule):
         for i in range(x.shape[0]):
             if random.random() < self.poison_rate:
                 # craft poison data
-                x[i] = get_de_normalization(self.dataset_name)(x[i])
-                x_p = x[i]
-                tg_size = self.wind
-                # tg_pos = random.randint(0, tg_size)
-                tg_pos = 0
+                x_p = get_de_normalization(self.dataset_name)(x[i]).squeeze()
+                tg_size = self.config.attack.wind
+                tg_pos = 0 if self.config.attack.rand_pos == 0 else random.randint(0, self.config.attack.wind)
                 x_p *= 255.
                 x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
                 x_yuv = torch.clip(x_yuv, 0, 255)

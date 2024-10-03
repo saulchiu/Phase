@@ -43,14 +43,15 @@ def train_mdoel(config: DictConfig):
     weight_decay = config.weight_decay
 
     # save config, and source file
-    print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     target_folder = f'../results/{dataset_name}/{attack_name}/{now()}' if config.path == 'None' else config.path
+    config.path = target_folder
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     main_target_path = os.path.join(target_folder, 'train.py')
     shutil.copy(__file__, main_target_path)
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
+    print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
 
     batch = config.batch
     if dataset_name == 'imagenette':
@@ -81,12 +82,13 @@ def train_mdoel(config: DictConfig):
     else:
         raise NotImplementedError(dataset_name)
     train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw)
-    test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=True, num_workers=nw)
+    test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw)
     poison_train_list = []
     for x, y in iter(train_dl):
         for i in range(x.shape[0]):
             if random.random() < ratio and attack_name != 'benign':  # craft poison data
-                x_re = patch_trigger(get_de_normalization(dataset_name)(x[i]), attack_name, config.attack)
+                x_re = get_de_normalization(dataset_name)(x[i]).squeeze()
+                x_re = patch_trigger(x_re, attack_name, config.attack)
                 x[i] = x_re
                 y[i] = target_label
             poison_train_list.append((x[i], y[i]))
@@ -97,7 +99,8 @@ def train_mdoel(config: DictConfig):
             for i in range(x.shape[0]):
                 if y[i] == target_label:
                     continue
-                x_re = patch_trigger(get_de_normalization(dataset_name)(x[i]), attack_name)
+                x_re = get_de_normalization(dataset_name)(x[i]).squeeze()
+                x_re = patch_trigger(x_re, attack_name, config.attack)
                 x[i] = x_re
                 y[i] = target_label
                 poison_test_list.append((x[i], y[i]))
@@ -105,10 +108,10 @@ def train_mdoel(config: DictConfig):
 
     net = PreActResNet18(num_classes=num_classes).to('cuda:0')
     poison_train_dl = DataLoader(dataset=List2Dataset(poison_train_list), batch_size=batch, shuffle=True, num_workers=nw)
-    poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), batch_size=batch, shuffle=True, num_workers=nw)
-    model = MyLightningModule(net, lr, momentum, weight_decay)
+    poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), batch_size=batch, shuffle=False, num_workers=nw)
+    model = MyLightningModule(net, config)
     logger = CSVLogger(save_dir=target_folder, name='log')
-    trainer = L.Trainer(max_epochs=epoch, devices=[0], logger=logger, default_root_dir=target_folder, check_val_every_n_epoch=10)
+    trainer = L.Trainer(max_epochs=epoch, devices=[0], logger=logger, default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=poison_train_dl)
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance

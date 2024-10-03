@@ -49,10 +49,8 @@ def train_mdoel(config: DictConfig):
     device = config.device
 
     # save config, and source file
-    print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     target_folder = f'../results/{dataset_name}/{attack_name}/{now()}' if config.path == 'None' else config.path
     config.path = target_folder
-    print(target_folder)
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     train_target_path = os.path.join(target_folder, 'train.py')
@@ -61,6 +59,7 @@ def train_mdoel(config: DictConfig):
     shutil.copy('../models/cnn_lightning_model.py', train_target_path)
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
+    print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     
     batch = config.batch
     if dataset_name == 'imagenette':
@@ -145,11 +144,8 @@ def train_mdoel(config: DictConfig):
             if y[i] == target_label:
                 continue
             # craft poison data
-            x[i] = get_de_normalization(dataset_name)(x[i])
-            # tg_pos = random.randint(0, wind)
-            tg_pos = 0
-            # x_rgb = x[i].detach().clone()
-            x_p = x[i]
+            tg_pos = 0 if config.attack.rand_pos == 0 else random.randint(0, wind)
+            x_p = get_de_normalization(dataset_name)(x[i]).squeeze()
             x_p *= 255.
             x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
             x_yuv = torch.clip(x_yuv, 0, 255)
