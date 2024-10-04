@@ -24,23 +24,24 @@ import random
 from tools.dataset import get_de_normalization
 
 
-def patch_trigger(x_0: torch.Tensor, attack_name: str, args=None) -> torch.Tensor:
+def patch_trigger(x_0: torch.Tensor, attack_config) -> torch.Tensor:
     """
     add a trigger to the original image given attack method
     :param x_0:
     :param attack_name: e.g., noise, badnet, blended, ftrojan, lf (low frequency), ctrl, wanet
     :return: poison image with trigger
     """
+    attack_name = attack_config.name
     c, h, w = x_0.shape
     trans = Compose([ToTensor(), Resize((h, h))])
     if attack_name == 'blended':
-        tg = Image.open('../resource/blended/hello_kitty.jpeg')
+        tg = Image.open(attack_config.tg_path)
         tg = trans(tg)
-        x_0 = x_0 * 0.8 + tg * 0.2
+        x_0 = x_0 * (1 - attack_config.blended_coeff) + tg * attack_config.blended_coeff
         return x_0
     elif attack_name == 'badnet':
-        tg = Image.open(f'../resource/badnet/trigger_{h}_{int(h / 10)}.png')
-        mask = Image.open(f'../resource/badnet/mask_{h}_{int(h / 10)}.png')
+        tg = Image.open(f'{attack_config.tg_path}/trigger_{h}_{int(h / 10)}.png')
+        mask = Image.open(f'{attack_config.tg_path}/mask_{h}_{int(h / 10)}.png')
         tg = trans(tg)
         mask = trans(mask)
         x_0 = (1 - mask) * x_0 + tg * mask

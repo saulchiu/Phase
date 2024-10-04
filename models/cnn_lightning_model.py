@@ -6,34 +6,47 @@ import random
 from tools.img import rgb_to_yuv, yuv_to_rgb
 from skimage.metrics import structural_similarity
 from tools.dataset import get_de_normalization
+from ema_pytorch.ema_pytorch import EMA
 
-class MyLightningModule(L.LightningModule):
+class BASELightningModule(L.LightningModule):
     def __init__(self, model, config):
         super().__init__()
         self.model = model
+        self.ema = EMA(self.model, update_every=10)
+        self.ema.to(device=self.device)
         self.lr = config.lr
         self.momentum = config.momentum
         self.weight_decay = config.weight_decay
         self.validation_step_outputs = []
         self.cur_val_loss = 0.
         self. cur_val_acc = 0.
-        self.save_hyperparameters()
+        self.automatic_optimization = False
+        self.opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        self.schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, T_max=config.epoch)
 
     def forward(self, x):
         return self.model(x)
 
     def on_train_epoch_end(self):
-        pass
+        self.schedule.step()
 
     def training_step(self, batch):
+        self.model.train()
+        self.ema.train()
         x, y = batch
         y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
-        return loss
+        self.opt.zero_grad()
+        self.manual_backward(loss)
+        self.opt.step()
+        self.ema.update()
+        # return loss
     
     def validation_step(self, batch):
+        self.model.eval()
+        self.ema.eval()
         x, y = batch
-        y_p = self.forward(x)
+        y_p = self.ema(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()
@@ -46,8 +59,10 @@ class MyLightningModule(L.LightningModule):
         return accuracy
     
     def test_step(self, batch):
+        self.model.eval()
+        self.ema.eval()
         x, y = batch
-        y_p = self.forward(x)
+        y_p = self.ema(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()
@@ -57,16 +72,17 @@ class MyLightningModule(L.LightningModule):
         return {"test_loss": loss, "test_accuracy": accuracy}
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
-        return {
-            'optimizer': optimizer,
-            "lr_scheduler": {
-                        "scheduler": scheduler,
-                        "monitor": self.cur_val_acc,
-                        "frequency": 1,
-                    },
-        }
+        # optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+        # return {
+        #     'optimizer': optimizer,
+        #     "lr_scheduler": {
+        #                 "scheduler": scheduler,
+        #                 "monitor": self.cur_val_acc,
+        #                 "frequency": 1,
+        #             },
+        # }
+        return None
 
 
 class INBALightningModule(L.LightningModule):
@@ -74,6 +90,8 @@ class INBALightningModule(L.LightningModule):
         super().__init__()
         self.config = config
         self.model = model
+        self.ema = EMA(self.model, update_every=10)
+        self.ema.to(device=self.device)
         self.lr = config.lr
         self.momentum = config.momentum
         self.weight_decay = config.weight_decay
@@ -81,8 +99,6 @@ class INBALightningModule(L.LightningModule):
         self.trigger = torch.nn.Parameter(self.init_trigger())
         self.target_label = config.target_label
         self.dataset_name = config.dataset_name
-        self.save_hyperparameters(config)
-
         self.automatic_optimization = False
         self.validation_step_outputs = []
         self.cur_val_loss = 0.
@@ -120,6 +136,8 @@ class INBALightningModule(L.LightningModule):
 
 
     def training_step(self, batch):
+        self.model.train()
+        self.ema.train()
         x, y = batch
         x_list = []
         for i in range(x.shape[0]):
@@ -161,8 +179,10 @@ class INBALightningModule(L.LightningModule):
         # return loss
     
     def validation_step(self, batch):
+        self.model.eval()
+        self.ema.eval()
         x, y = batch
-        y_p = self.forward(x)
+        y_p = self.ema(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()
@@ -175,8 +195,10 @@ class INBALightningModule(L.LightningModule):
         return accuracy
     
     def test_step(self, batch):
+        self.model.eval()
+        self.ema.eval()
         x, y = batch
-        y_p = self.forward(x)
+        y_p = self.ema(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()

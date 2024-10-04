@@ -179,6 +179,18 @@ def train_mdoel(config: DictConfig):
         "tg_before": tg_before,
         "tg_after": model.trigger
     }, f'{target_folder}/trigger.pth')
+    res = {
+    "model": model.model.state_dict(),
+    "ema": model.ema.state_dict(),
+    "param_opt": model.opt.state_dict(),
+    "tg_opt": model.tg_opt.state_dict(),
+    "schedule": model.schedule.state_dict(),
+    "config": config,
+    "epoch": model.current_epoch,
+    "tg_before": tg_before,
+    "tg_after": model.trigger,
+    }
+    torch.save(res, f"{target_folder}/results.pth")
 
 
 if __name__ == '__main__':

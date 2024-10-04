@@ -17,7 +17,7 @@ from tools.inject_backdoor import patch_trigger
 from tools.dataset import get_dataloader, get_benign_transform
 import torch.nn.functional as F
 import cv2
-from models.cnn_lightning_model import MyLightningModule
+from models.cnn_lightning_model import BASELightningModule
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from tools.time import now
@@ -29,6 +29,7 @@ from tools.utils import manual_seed
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
+    resume_train = config.path != "None"
     seed = config.seed
     manual_seed(seed)
 
@@ -38,12 +39,8 @@ def train_mdoel(config: DictConfig):
     target_label = config.target_label
     nw = config.num_workers
     epoch = config.epoch
-    lr = config.lr
-    momentum = config.momentum
-    weight_decay = config.weight_decay
-
     # save config, and source file
-    target_folder = f'../results/{dataset_name}/{attack_name}/{now()}' if config.path == 'None' else config.path
+    target_folder = config.path if resume_train else f'../results/{dataset_name}/{attack_name}/{now()}'
     config.path = target_folder
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
@@ -88,7 +85,8 @@ def train_mdoel(config: DictConfig):
         for i in range(x.shape[0]):
             if random.random() < ratio and attack_name != 'benign':  # craft poison data
                 x_re = get_de_normalization(dataset_name)(x[i]).squeeze()
-                x_re = patch_trigger(x_re, attack_name, config.attack)
+                # x_re = x[i]
+                x_re = patch_trigger(x_re, config.attack)
                 x[i] = x_re
                 y[i] = target_label
             poison_train_list.append((x[i], y[i]))
@@ -100,7 +98,8 @@ def train_mdoel(config: DictConfig):
                 if y[i] == target_label:
                     continue
                 x_re = get_de_normalization(dataset_name)(x[i]).squeeze()
-                x_re = patch_trigger(x_re, attack_name, config.attack)
+                # x_re = x[i]
+                x_re = patch_trigger(x_re, config.attack)
                 x[i] = x_re
                 y[i] = target_label
                 poison_test_list.append((x[i], y[i]))
@@ -108,16 +107,25 @@ def train_mdoel(config: DictConfig):
 
     net = PreActResNet18(num_classes=num_classes).to('cuda:0')
     poison_train_dl = DataLoader(dataset=List2Dataset(poison_train_list), batch_size=batch, shuffle=True, num_workers=nw)
-    poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), batch_size=batch, shuffle=False, num_workers=nw)
-    model = MyLightningModule(net, config)
+    model = BASELightningModule(net, config)
     logger = CSVLogger(save_dir=target_folder, name='log')
-    trainer = L.Trainer(max_epochs=epoch, devices=[0], logger=logger, default_root_dir=target_folder)
-    trainer.fit(model=model, train_dataloaders=poison_train_dl)
+    trainer = L.Trainer(max_epochs=epoch, devices=[0], logger=logger, default_root_dir=target_folder, check_val_every_n_epoch=int(epoch / 2))
+    trainer.fit(model=model, train_dataloaders=poison_train_dl, val_dataloaders=test_dl)
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
     if attack_name != 'benign':
+        poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), batch_size=batch, shuffle=False, num_workers=nw)
         print('----------poison----------')
         trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
+    res = {
+        "model": model.model.state_dict(),
+        "ema": model.ema.state_dict(),
+        "param_opt": model.opt.state_dict(),
+        "schedule": model.schedule.state_dict(),
+        "config": config,
+        "epoch": model.current_epoch,
+    }
+    torch.save(res, f"{target_folder}/results.pth")
 
 
 
