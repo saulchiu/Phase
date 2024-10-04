@@ -1,3 +1,5 @@
 name: inba
 wind: 3
 rand_pos: 0
+target_channel: 1
+ssim_coeff: 10

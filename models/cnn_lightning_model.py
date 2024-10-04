@@ -7,6 +7,7 @@ from tools.img import rgb_to_yuv, yuv_to_rgb
 from skimage.metrics import structural_similarity
 from tools.dataset import get_de_normalization
 from ema_pytorch.ema_pytorch import EMA
+from torchmetrics.image import StructuralSimilarityIndexMeasure
 
 class BASELightningModule(L.LightningModule):
     def __init__(self, model, config):
@@ -136,38 +137,46 @@ class INBALightningModule(L.LightningModule):
 
 
     def training_step(self, batch):
+        torch.autograd.set_detect_anomaly(True)
         self.model.train()
         self.ema.train()
         x, y = batch
         x_list = []
+        x_p_list = []
+        ssim_function = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
         for i in range(x.shape[0]):
             if random.random() < self.poison_rate:
                 # craft poison data
-                x_p = get_de_normalization(self.dataset_name)(x[i]).squeeze()
+                x[i] = get_de_normalization(self.dataset_name)(x[i]).squeeze()
+                x_p = x[i] * 255.
                 tg_size = self.config.attack.wind
                 tg_pos = 0 if self.config.attack.rand_pos == 0 else random.randint(0, self.config.attack.wind)
-                x_p *= 255.
                 x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
                 x_yuv = torch.clip(x_yuv, 0, 255)
-                x_u = x_yuv[1]
+                x_u = x_yuv[self.config.attack.target_channel]
                 x_u_fft = torch.fft.fft2(x_u)
                 x_u_fft_imag = torch.imag(x_u_fft)
                 x_u_fft_imag[tg_pos:(tg_pos+tg_size), tg_pos:(tg_pos+tg_size)] = self.trigger
                 x_u_fft = torch.real(x_u_fft) + 1j * x_u_fft_imag
                 x_u = torch.real(torch.fft.ifft2(x_u_fft))
-                x_yuv[1] = x_u
+                x_yuv[self.config.attack.target_channel] = x_u
                 x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
                 x_p = torch.clip(x_p, 0, 255)
-                x_p /= 255.                    
+                x_p /= 255.
+                if self.extra_epochs > 0:
+                    x_p_list.append(x_p)
+                    x_list.append(x[i].clone())
                 x[i] = x_p
                 y[i] = self.target_label
-                x_list.append(x[i])
 
         # if poison rate is 0, never into this loop
-        if len(x_list) > 0 and self.extra_epochs > 0:
+        if len(x_p_list) > 0 and self.extra_epochs > 0:
+            x_p_list = torch.stack(x_p_list, dim=0)
             x_list = torch.stack(x_list, dim=0)
-            y_list = (torch.zeros(size=(x_list.shape[0],), device=x_list.device) + self.target_label).long()
-            loss_poison = torch.nn.functional.cross_entropy(self.forward(x_list), y_list)
+            ssim_tensor = ssim_function(x_p_list, x_list)
+            y_list = (torch.zeros(size=(x_p_list.shape[0],), device=x_p_list.device) + self.target_label).long()
+            loss_poison = torch.nn.functional.cross_entropy(self.forward(x_p_list), y_list)
+            loss_poison = loss_poison + (1. - ssim_tensor) * self.config.attack.ssim_coeff
             self.tg_opt.zero_grad()
             self.manual_backward(loss_poison, retain_graph=True)
             self.tg_opt.step()

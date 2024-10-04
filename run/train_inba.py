@@ -149,14 +149,14 @@ def train_mdoel(config: DictConfig):
             x_p *= 255.
             x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
             x_yuv = torch.clip(x_yuv, 0, 255)
-            x_u = x_yuv[1]
+            x_u = x_yuv[config.attack.target_channel]
             x_u_fft = torch.fft.fft2(x_u)
             x_u_fft_imag = torch.imag(x_u_fft)
             x_u_fft_imag[tg_pos:(tg_pos+wind), tg_pos:(tg_pos+wind)] = model.trigger
             x_u_fft = torch.real(x_u_fft) + 1j * x_u_fft_imag
             x_u = torch.real(torch.fft.ifft2(x_u_fft))
 
-            x_yuv[1] = x_u
+            x_yuv[config.attack.target_channel] = x_u
             x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
             x_p = torch.clip(x_p, 0, 255)
             x_p /= 255.
