@@ -130,8 +130,9 @@ def train_mdoel(config: DictConfig):
     # tg_before = model.trigger
     tg_before = model.trigger.detach().clone()
     logger = CSVLogger(save_dir=target_folder, name='log')
-    trainer = L.Trainer(max_epochs=epoch, devices=[device], logger=logger, default_root_dir=target_folder)
-    trainer.fit(model=model, train_dataloaders=train_dl)
+    assert config.epoch > config.val_epoch
+    trainer = L.Trainer(max_epochs=epoch, devices=[device], logger=logger, default_root_dir=target_folder, check_val_every_n_epoch=config.val_epoch)
+    trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=test_dl)
     if config.model == "repvgg":
         model.model.deploy =True
     model.eval()
@@ -181,7 +182,6 @@ def train_mdoel(config: DictConfig):
     }, f'{target_folder}/trigger.pth')
     res = {
     "model": model.model.state_dict(),
-    "ema": model.ema.state_dict(),
     "param_opt": model.opt.state_dict(),
     "tg_opt": model.tg_opt.state_dict(),
     "schedule": model.schedule.state_dict(),

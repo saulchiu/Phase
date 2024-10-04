@@ -11,7 +11,8 @@ device: 0
 batch: 128
 model: resnet18
 seed: 42
-ema_update_every: 100
+val_epoch: 20
+# ema_update_every: 100
 
 defaults:
   - attack: inba

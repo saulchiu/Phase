@@ -12,9 +12,10 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure
 class BASELightningModule(L.LightningModule):
     def __init__(self, model, config):
         super().__init__()
+        self.config = config
         self.model = model
-        self.ema = EMA(self.model, update_every=10)
-        self.ema.to(device=self.device)
+        # self.ema = EMA(self.model, update_every=self.config.ema_update_every)
+        # self.ema.to(device=self.device)
         self.lr = config.lr
         self.momentum = config.momentum
         self.weight_decay = config.weight_decay
@@ -33,21 +34,21 @@ class BASELightningModule(L.LightningModule):
 
     def training_step(self, batch):
         self.model.train()
-        self.ema.train()
+        # self.ema.train()
         x, y = batch
         y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         self.opt.zero_grad()
         self.manual_backward(loss)
         self.opt.step()
-        self.ema.update()
+        # self.ema.update()
         # return loss
     
     def validation_step(self, batch):
         self.model.eval()
-        self.ema.eval()
+        # self.ema.eval()
         x, y = batch
-        y_p = self.ema(x)
+        y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()
@@ -61,9 +62,9 @@ class BASELightningModule(L.LightningModule):
     
     def test_step(self, batch):
         self.model.eval()
-        self.ema.eval()
+        # self.ema.eval()
         x, y = batch
-        y_p = self.ema(x)
+        y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()
@@ -91,8 +92,8 @@ class INBALightningModule(L.LightningModule):
         super().__init__()
         self.config = config
         self.model = model
-        self.ema = EMA(self.model, update_every=self.config.ema_update_every)
-        self.ema.to(device=self.device)
+        # self.ema = EMA(self.model, update_every=self.config.ema_update_every)
+        # self.ema.to(device=self.device)
         self.lr = config.lr
         self.momentum = config.momentum
         self.weight_decay = config.weight_decay
@@ -130,7 +131,7 @@ class INBALightningModule(L.LightningModule):
         elif self.extra_epochs == 0:
             print('-----start train model-----')
             self.model.load_state_dict(self.model_state_dict_backup)
-            self.ema = EMA(self.model, update_every=10)
+            # self.ema = EMA(self.model, update_every=10)
             self.param_opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
             self.extra_epochs = -1
@@ -140,7 +141,7 @@ class INBALightningModule(L.LightningModule):
     def training_step(self, batch):
         torch.autograd.set_detect_anomaly(True)
         self.model.train()
-        self.ema.train()
+        # self.ema.train()
         x, y = batch
         x_list = []
         x_p_list = []
@@ -190,9 +191,9 @@ class INBALightningModule(L.LightningModule):
     
     def validation_step(self, batch):
         self.model.eval()
-        self.ema.eval()
+        # self.ema.eval()
         x, y = batch
-        y_p = self.ema(x)
+        y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()
@@ -206,9 +207,9 @@ class INBALightningModule(L.LightningModule):
     
     def test_step(self, batch):
         self.model.eval()
-        self.ema.eval()
+        # self.ema.eval()
         x, y = batch
-        y_p = self.ema(x)
+        y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()
