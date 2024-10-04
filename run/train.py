@@ -78,8 +78,8 @@ def train_mdoel(config: DictConfig):
         test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, scale, train=False))
     else:
         raise NotImplementedError(dataset_name)
-    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw)
-    test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw)
+    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
+    test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
     poison_train_list = []
     for x, y in iter(train_dl):
         for i in range(x.shape[0]):
@@ -106,7 +106,8 @@ def train_mdoel(config: DictConfig):
         print(len(poison_train_list), len(poison_test_list))
 
     net = PreActResNet18(num_classes=num_classes).to('cuda:0')
-    poison_train_dl = DataLoader(dataset=List2Dataset(poison_train_list), batch_size=batch, shuffle=True, num_workers=nw)
+    poison_train_dl = DataLoader(dataset=List2Dataset(poison_train_list), 
+                                 batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
     model = BASELightningModule(net, config)
     logger = CSVLogger(save_dir=target_folder, name='log')
     assert config.epoch > config.val_epoch
@@ -115,7 +116,8 @@ def train_mdoel(config: DictConfig):
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
     if attack_name != 'benign':
-        poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), batch_size=batch, shuffle=False, num_workers=nw)
+        poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), 
+                                    batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
         print('----------poison----------')
         trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
     res = {
@@ -125,6 +127,7 @@ def train_mdoel(config: DictConfig):
         "config": config,
         "epoch": model.current_epoch,
     }
+    model.plot_metrics()
     torch.save(res, f"{target_folder}/results.pth")
 
 

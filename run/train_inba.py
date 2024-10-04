@@ -182,7 +182,7 @@ def train_mdoel(config: DictConfig):
     }, f'{target_folder}/trigger.pth')
     res = {
     "model": model.model.state_dict(),
-    "param_opt": model.opt.state_dict(),
+    "param_opt": model.param_opt.state_dict(),
     "tg_opt": model.tg_opt.state_dict(),
     "schedule": model.schedule.state_dict(),
     "config": config,
@@ -190,6 +190,7 @@ def train_mdoel(config: DictConfig):
     "tg_before": tg_before,
     "tg_after": model.trigger,
     }
+    model.plot_metrics()
     torch.save(res, f"{target_folder}/results.pth")
 
 

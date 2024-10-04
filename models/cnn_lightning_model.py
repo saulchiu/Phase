@@ -8,6 +8,8 @@ from skimage.metrics import structural_similarity
 from tools.dataset import get_de_normalization
 from ema_pytorch.ema_pytorch import EMA
 from torchmetrics.image import StructuralSimilarityIndexMeasure
+import matplotlib.pyplot as plt
+import os
 
 class BASELightningModule(L.LightningModule):
     def __init__(self, model, config):
@@ -16,14 +18,15 @@ class BASELightningModule(L.LightningModule):
         self.model = model
         # self.ema = EMA(self.model, update_every=self.config.ema_update_every)
         # self.ema.to(device=self.device)
-        self.lr = config.lr
-        self.momentum = config.momentum
-        self.weight_decay = config.weight_decay
         self.validation_step_outputs = []
         self.cur_val_loss = 0.
         self. cur_val_acc = 0.
         self.automatic_optimization = False
-        self.opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.amp)
+        self.opt = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()),
+                                    lr=self.config.lr, 
+                                    momentum=self.config.momentum, 
+                                    weight_decay=self.config.weight_decay)
         self.schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, T_max=config.epoch)
 
     def forward(self, x):
@@ -34,30 +37,41 @@ class BASELightningModule(L.LightningModule):
 
     def training_step(self, batch):
         self.model.train()
-        # self.ema.train()
+        self.model.to(self.device, non_blocking=self.config.non_blocking)
         x, y = batch
-        y_p = self.forward(x)
-        loss = torch.nn.functional.cross_entropy(y_p, y)
+        x = x.to(self.device, non_blocking=self.config.non_blocking)
+        y = y.to(self.device, non_blocking=self.config.non_blocking)
+        with torch.cuda.amp.autocast(enabled=self.config.amp):
+            y_p = self.forward(x)
+            loss = torch.nn.functional.cross_entropy(y_p, y)
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.opt)
+        self.scaler.update()
         self.opt.zero_grad()
-        self.manual_backward(loss)
-        self.opt.step()
         # self.ema.update()
         # return loss
     
     def validation_step(self, batch):
         self.model.eval()
-        # self.ema.eval()
+        self.model.to(self.device, non_blocking=self.config.non_blocking)
         x, y = batch
+        x = x.to(self.device, non_blocking=self.config.non_blocking)
+        y = y.to(self.device, non_blocking=self.config.non_blocking)
         y_p = self.forward(x)
         loss = torch.nn.functional.cross_entropy(y_p, y)
-        pred_labels = torch.argmax(y_p, dim=1)
-        correct = (pred_labels == y).sum().item()
+        _, predicted = torch.max(y_p, -1)
+        correct = predicted.eq(y).sum()
         accuracy = correct / x.shape[0]
-        self.validation_step_outputs.append(accuracy)
+        # self.validation_step_outputs.append(accuracy)
         self.log('val_loss', loss, prog_bar=True)
         self.log('val_accuracy', accuracy, prog_bar=True)
         self.cur_val_loss = loss
         self.cur_val_acc = accuracy
+        self.validation_step_outputs.append((
+            self.current_epoch,
+            self.cur_val_acc,
+            self.cur_val_loss.item()
+        ))
         return accuracy
     
     def test_step(self, batch):
@@ -85,6 +99,40 @@ class BASELightningModule(L.LightningModule):
         #             },
         # }
         return None
+
+    def plot_metrics(self):
+        target_folder = self.config.path
+        epochs = [output[0] for output in self.validation_step_outputs]
+        val_accuracies = [output[1] for output in self.validation_step_outputs]
+        val_losses = [output[2] for output in self.validation_step_outputs]
+        
+        fig, ax1 = plt.subplots(figsize=(8, 6))  # Adjust figure size
+        ax1.set_xlabel('Epoch')
+        
+        # Plot validation accuracy with improved line style
+        ax1.set_ylabel('Validation Accuracy', color='tab:blue')
+        ax1.plot(epochs, val_accuracies, color='tab:blue', linewidth=2, marker='o', linestyle='-', label="Accuracy")
+        ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+        ax2 = ax1.twinx()
+        
+        # Plot validation loss with improved line style
+        ax2.set_ylabel('Validation Loss', color='tab:red')
+        ax2.plot(epochs, val_losses, color='tab:red', linewidth=2, marker='x', linestyle='--', label="Loss")
+        ax2.tick_params(axis='y', labelcolor='tab:red')
+        
+        # Adding a legend
+        fig.suptitle('Validation Accuracy and Loss over Epochs', fontsize=14)
+        fig.tight_layout()
+        
+        # Save the plot
+        if not os.path.exists(target_folder):
+            os.makedirs(target_folder)
+        file_path = os.path.join(target_folder, 'val_metrics_improved.png')
+        plt.savefig(file_path, dpi=300)  # Higher DPI for better quality
+        plt.close()
+        print(f"Plot saved to {file_path}")
+
 
 
 class INBALightningModule(L.LightningModule):
@@ -139,7 +187,7 @@ class INBALightningModule(L.LightningModule):
 
 
     def training_step(self, batch):
-        torch.autograd.set_detect_anomaly(True)
+        # torch.autograd.set_detect_anomaly(True)
         self.model.train()
         # self.ema.train()
         x, y = batch
@@ -198,11 +246,16 @@ class INBALightningModule(L.LightningModule):
         pred_labels = torch.argmax(y_p, dim=1)
         correct = (pred_labels == y).sum().item()
         accuracy = correct / x.shape[0]
-        self.validation_step_outputs.append(accuracy)
+        # self.validation_step_outputs.append(accuracy)
         self.log('val_loss', loss, prog_bar=True)
         self.log('val_accuracy', accuracy, prog_bar=True)
         self.cur_val_loss = loss
         self.cur_val_acc = accuracy
+        self.validation_step_outputs.append((
+            self.current_epoch,
+            self.cur_val_acc,
+            self.cur_val_loss.item()
+        ))
         return accuracy
     
     def test_step(self, batch):
@@ -236,3 +289,36 @@ class INBALightningModule(L.LightningModule):
         #     }
         # )
         return None
+
+    def plot_metrics(self):
+        target_folder = self.config.path
+        epochs = [output[0] for output in self.validation_step_outputs]
+        val_accuracies = [output[1] for output in self.validation_step_outputs]
+        val_losses = [output[2] for output in self.validation_step_outputs]
+        
+        fig, ax1 = plt.subplots(figsize=(8, 6))  # Adjust figure size
+        ax1.set_xlabel('Epoch')
+        
+        # Plot validation accuracy with improved line style
+        ax1.set_ylabel('Validation Accuracy', color='tab:blue')
+        ax1.plot(epochs, val_accuracies, color='tab:blue', linewidth=2, marker='o', linestyle='-', label="Accuracy")
+        ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+        ax2 = ax1.twinx()
+        
+        # Plot validation loss with improved line style
+        ax2.set_ylabel('Validation Loss', color='tab:red')
+        ax2.plot(epochs, val_losses, color='tab:red', linewidth=2, marker='x', linestyle='--', label="Loss")
+        ax2.tick_params(axis='y', labelcolor='tab:red')
+        
+        # Adding a legend
+        fig.suptitle('Validation Accuracy and Loss over Epochs', fontsize=14)
+        fig.tight_layout()
+        
+        # Save the plot
+        if not os.path.exists(target_folder):
+            os.makedirs(target_folder)
+        file_path = os.path.join(target_folder, 'val_metrics_improved.png')
+        plt.savefig(file_path, dpi=300)  # Higher DPI for better quality
+        plt.close()
+        print(f"Plot saved to {file_path}")
