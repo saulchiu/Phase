@@ -216,7 +216,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_yuv = torch.clip(x_yuv, 0, 255)
         tg: torch.tensor = torch.load(f'{config.path}/trigger.pth')["tg_after"]
         tg_size = config.attack.wind
-        tg_pos = 0 if config.attack.rand_pos == 0 else random.randint(0, tg_size)
+        tg_pos = 0 if config.attack.rand_pos == 0 else random.randint(0, x_torch.shape[1] - tg_size)
         x_fft = torch.fft.fft2(x_yuv[config.attack.target_channel])
         x_imag = torch.imag(x_fft)
         x_imag[tg_pos:(tg_pos + tg_size), tg_pos:(tg_pos + tg_size)] = tg

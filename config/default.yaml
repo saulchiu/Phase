@@ -19,4 +19,4 @@ val_epoch: 1
 # ema_update_every: 100
 
 defaults:
-  - attack: inba
+  - attack: benign

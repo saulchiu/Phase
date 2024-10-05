@@ -120,8 +120,6 @@ def train_mdoel(config: DictConfig):
     "schedule": model.scheduler.state_dict(),
     "config": config,
     "epoch": model.current_epoch,
-    "tg_before": tg_before,
-    "tg_after": model.trigger,
     }
     torch.save(res, f"{target_folder}/results.pth")
     visualize_metrics(model.metrics_list, target_folder)

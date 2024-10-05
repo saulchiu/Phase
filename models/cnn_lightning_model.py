@@ -220,7 +220,7 @@ class INBALightningModule(L.LightningModule):
                 x[i] = get_de_normalization(self.dataset_name)(x[i]).squeeze()
                 x_p = x[i] * 255.
                 tg_size = self.config.attack.wind
-                tg_pos = 0 if self.config.attack.rand_pos == 0 else random.randint(0, self.config.attack.wind)
+                tg_pos = 0 if self.config.attack.rand_pos == 0 else random.randint(0, x[i].shape[1] - self.config.attack.wind)
                 x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
                 x_yuv = torch.clip(x_yuv, 0, 255)
                 x_u = x_yuv[self.config.attack.target_channel]
