@@ -155,7 +155,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         pass
     elif attack_name == 'duba':
         x_c = tensor2ndarray(x_0) / 255.  # scale to 0~1
-        x_p_img = PIL.Image.open('../resource/example/000001.jpg')
+        x_p_img = PIL.Image.open('../resource/DUBA/64.png')
         wave = 'db2'
         alpha = beta = 0.4
 
@@ -202,7 +202,13 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_re = idct_2d_3c_slide_window(x_re_dct_1)
 
         x_re = np.clip(x_re, 0, 1)
-        return ndarray2tensor(x_re * 255.)
+        # mask trigger
+        x_re *= 255.
+        x_c *= 255.
+        x_re[x_c >= 220] = x_c [x_c >= 220]
+        x_re[x_c <= 30] = x_c[x_c <= 30]
+        x_re = x_re.astype(np.float32)
+        return ndarray2tensor(x_re)
     elif attack_name == 'inba':
         x_torch = x_0.detach().clone()
         x_torch *= 255.

@@ -211,7 +211,7 @@ def clip(data: numpy.ndarray) -> numpy.ndarray:
         return data
 
 
-def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x_process_target, is_clip: bool = False):
+def plot_space_target_space(x_space: numpy.ndarray, y, x_target, x_process_space, y_p, x_process_target, is_clip: bool = False):
     """
     compare the image in original domain (e.g., space domain) and target domain (e.g., frequency domain)
     :param x_space:
@@ -226,7 +226,7 @@ def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x
         x_process_target = clip(x_process_target)
     fig, axs = plt.subplots(2, 2, figsize=(10, 8))
     axs[0, 0].imshow(x_space)
-    axs[0, 0].set_title('Original Image')
+    axs[0, 0].set_title(f'Original Image: {y}')
     axs[0, 0].axis('off')
 
     axs[0, 1].imshow(x_target[:, :, 0], cmap='hot')
@@ -234,7 +234,7 @@ def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x
     axs[0, 1].axis('off')
 
     axs[1, 0].imshow(x_process_space)
-    axs[1, 0].set_title(f'after (attack) process')
+    axs[1, 0].set_title(f'after (attack) process: {y_p}')
     axs[1, 0].axis('off')
 
     im2 = axs[1, 1].imshow(x_process_target[:, :, 0], cmap='hot')

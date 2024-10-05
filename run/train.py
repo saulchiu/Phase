@@ -30,9 +30,8 @@ from tools.dataset import PoisonDataset
 from tools.inject_backdoor import BadTransform
 import matplotlib.pyplot as plt
 from pytorch_lightning.loggers import TensorBoardLogger
-
-
-
+from repvgg_pytorch.repvgg import RepVGG
+from torchvision.models.convnext import ConvNeXt, CNBlockConfig
 
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
@@ -93,7 +92,40 @@ def train_mdoel(config: DictConfig):
     train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
     test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
 
-    net = PreActResNet18(num_classes=num_classes).to('cuda:0')
+    if config.model == "resnet18":
+        net = PreActResNet18(num_classes=num_classes).to(f'cuda:{0}')
+    elif config.model == "repvgg":
+        net = RepVGG(num_blocks=[4, 6, 16, 1], num_classes=num_classes, width_multiplier=[3, 3, 3, 5]).to(device=f'cuda:{0}')
+    elif config.model == "convnext":
+        if dataset_name == 'cifar10':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.1
+        elif dataset_name == 'imagenette':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.2
+        elif dataset_name == 'gtsrb':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.3
+        elif dataset_name == 'fer2013':
+            channel_list = [64, 128, 256, 512]
+            stochastic_depth_prob = 0.1
+        else:
+            raise NotImplementedError(dataset_name)
+        block_setting = [
+            CNBlockConfig(input_channels=channel_list[0], out_channels=channel_list[1], num_layers=3),
+            CNBlockConfig(input_channels=channel_list[1], out_channels=channel_list[2], num_layers=3),
+            CNBlockConfig(input_channels=channel_list[2], out_channels=channel_list[3], num_layers=9),
+            CNBlockConfig(input_channels=channel_list[3], out_channels=None, num_layers=3)
+        ]
+        net = ConvNeXt(
+            block_setting=block_setting,
+            stochastic_depth_prob=stochastic_depth_prob,  # Lower stochastic depth for a small dataset
+            layer_scale=1e-6,
+            num_classes=num_classes
+        ).to(f'cuda:{0}')
+    else:
+        raise NotImplementedError(config.model)
+
     poison_train_dl = DataLoader(poison_train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
     model = BASELightningModule(net, config)
     # logger = TensorBoardLogger(save_dir=target_folder)

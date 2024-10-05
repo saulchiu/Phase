@@ -2,7 +2,7 @@ import sys
 
 sys.path.append('../')
 from tools.img import tensor2ndarray, rgb2yuv, yuv2rgb, plot_space_target_space, dct_2d_3c_slide_window, dct_2d_3c_full_scale
-from tools.dataset import get_dataloader
+from tools.dataset import get_dataloader, get_de_normalization
 from tools.inject_backdoor import patch_trigger
 import numpy as np
 import torch
@@ -14,11 +14,15 @@ from skimage.metrics import structural_similarity
 from skimage.metrics import peak_signal_noise_ratio
 import hydra
 from omegaconf import DictConfig, OmegaConf
+from models.preact_resnet import PreActResNet18
 
 
 if __name__ == '__main__':
-    dataset_name = 'rafdb'
-    attack = 'inba'
+    target_folder = '../' + 'results/cifar10/duba/20241005200125'
+    path = f'{target_folder}/config.yaml'
+    config = OmegaConf.load(path)
+    dataset_name = config.dataset_name
+    attack = config.attack.name
     device = 'cpu' 
     visible_tf = 'dct'
     total = 128
@@ -30,24 +34,26 @@ if __name__ == '__main__':
     ssim = 0.
     psnr = 0.
 
-    class Args():
-        pass
+    # load model
+    if config.model == "resnet18":
+        net = PreActResNet18()
+        ld = torch.load(f'{config.path}/results.pth', map_location=device)
+        net.load_state_dict(ld['model'])
+        net.eval()
+    else:
+        raise NotImplementedError
     
-    args = Args()
-
-    if attack == 'inba':
-        # load config
-        target_folder = '../' + 'results/rafdb/inba/20240929181151'
-        path = f'{target_folder}/config.yaml'
-        config = OmegaConf.load(path)
-        args.__dict__ = {
-            'config': config
-        }
-
-
     for i in tqdm(range(total)):
         x_space = batch[i]  # this is a tensor
-        x_space_poison = patch_trigger(x_space, attack, args=args)  # tensor too
+        x_space_poison = patch_trigger(
+            get_de_normalization(dataset_name)(x_space).squeeze()
+            , config)  # tensor too
+        if i == total - 1:
+            y_clean = net(x_space.unsqueeze(0))
+            y_poison = net(x_space_poison.unsqueeze(0))
+            _, predicted_clean = torch.max(y_clean, -1)
+            _, predicted_poison = torch.max(y_poison, -1)
+        x_space = get_de_normalization(dataset_name)(x_space).squeeze()
         x_space, x_space_poison = tensor2ndarray(x_space), tensor2ndarray(x_space_poison)
         ssim += structural_similarity(x_space, x_space_poison, win_size=3)
         psnr += peak_signal_noise_ratio(x_space, x_space_poison)
@@ -82,5 +88,6 @@ if __name__ == '__main__':
     psnr /= total
     x_f = res_before
     x_f_poison = res_after
-    plot_space_target_space(x_space, x_f, x_space_poison, x_f_poison, is_clip=True)
+    plot_space_target_space(x_space, predicted_clean.item(), x_f, x_space_poison, predicted_poison.item(), x_f_poison, is_clip=False)
     print(f'ssim: {ssim:.2f}, psnr: {psnr:.2f}')
+    # print(predicted_clean, predicted_poison)

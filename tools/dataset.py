@@ -17,7 +17,7 @@ def get_dataloader(dataset_name: str, batch_size: int):
     scale, trans, dl = None, None, None
     if dataset_name == 'cifar10':
         scale = 32
-        trans = Compose([ToTensor(), Resize((scale, scale))])
+        trans = get_benign_transform(dataset_name, scale)
         ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=trans)
         dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
     elif dataset_name == 'celeba':
