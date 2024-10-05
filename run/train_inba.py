@@ -25,27 +25,17 @@ import os
 import shutil
 import yaml
 from pytorch_lightning.loggers import CSVLogger
-from tools.img import rgb_to_yuv, yuv_to_rgb
-from skimage.metrics import structural_similarity
-from tools.dataset import get_de_normalization, get_dataset_normalization, get_benign_transform
+from tools.dataset import get_dataset_class_and_scale
 from repvgg_pytorch.repvgg import RepVGG
 from torchvision.models.convnext import ConvNeXt, CNBlockConfig
 from tools.utils import manual_seed
-from tools.dataset import PoisonDataset
+from tools.dataset import PoisonDataset, get_train_and_test_dataset
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
-    seed = config.seed
-    manual_seed(seed)
-
-    dataset_name = config.dataset_name
-    attack_name = config.attack.name
-    nw = config.num_workers
-    epoch = config.epoch
-    device = config.device
-
+    manual_seed(config.seed)
     # save config, and source file
-    target_folder = f'../results/{dataset_name}/{attack_name}/{now()}' if config.path == 'None' else config.path
+    target_folder = f'../results/{config.dataset_name}/{config.attack.name}/{now()}' if config.path == 'None' else config.path
     config.path = target_folder
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
@@ -57,56 +47,32 @@ def train_mdoel(config: DictConfig):
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     
-    batch = config.batch
-    if dataset_name == 'imagenette':
-        scale = 224
-        num_classes = 10
-        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_benign_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_benign_transform(dataset_name, scale, train=False))
-    elif dataset_name == 'cifar10':
-        num_classes = 10
-        scale = 32
-        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_benign_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_benign_transform(dataset_name, scale, train=False))
-    elif dataset_name == 'gtsrb':
-        num_classes = 43
-        scale = 32
-        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_benign_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_benign_transform(dataset_name, scale, train=False))
-    elif dataset_name == 'fer2013':
-        num_classes = 8
-        scale = 64
-        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_benign_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_benign_transform(dataset_name, scale, train=False))
-    elif dataset_name == 'rafdb':
-        num_classes = 7
-        scale = 64
-        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_benign_transform(dataset_name, scale))
-        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, scale, train=False))
-    else:
-        raise NotImplementedError(dataset_name)
-    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
-    test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
-
+    train_dl, test_dl = get_dataloader(
+        config.dataset_name,
+        config.batch,
+        pin_memory=config.pin_memory,
+        num_workers=config.num_workers
+    )
+    num_classes, _ = get_dataset_class_and_scale(config.dataset_name)
     if config.model == "resnet18":
-        net = PreActResNet18(num_classes=num_classes).to(f'cuda:{device}')
+        net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
     elif config.model == "repvgg":
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[0.75, 0.75, 0.75, 2.5]).to(device=f'cuda:{device}')
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[0.75, 0.75, 0.75, 2.5]).to(device=f'cuda:{config.device}')
     elif config.model == "convnext":
-        if dataset_name == 'cifar10':
+        if config.dataset_name == 'cifar10':
             channel_list = [96, 192, 384, 768]
             stochastic_depth_prob = 0.1
-        elif dataset_name == 'imagenette':
+        elif config.dataset_name == 'imagenette':
             channel_list = [96, 192, 384, 768]
             stochastic_depth_prob = 0.2
-        elif dataset_name == 'gtsrb':
+        elif config.dataset_name == 'gtsrb':
             channel_list = [96, 192, 384, 768]
             stochastic_depth_prob = 0.3
-        elif dataset_name == 'fer2013':
+        elif config.dataset_name == 'fer2013':
             channel_list = [64, 128, 256, 512]
             stochastic_depth_prob = 0.1
         else:
-            raise NotImplementedError(dataset_name)
+            raise NotImplementedError(config.dataset_name)
         block_setting = [
             CNBlockConfig(input_channels=channel_list[0], out_channels=channel_list[1], num_layers=3),
             CNBlockConfig(input_channels=channel_list[1], out_channels=channel_list[2], num_layers=3),
@@ -128,7 +94,7 @@ def train_mdoel(config: DictConfig):
     logger = CSVLogger(save_dir=target_folder, name='log')
     assert config.epoch > config.val_epoch
     assert config.epoch > config.attack.tg_epoch
-    trainer = L.Trainer(max_epochs=config.epoch + config.attack.tg_epoch, devices=[device], logger=logger, default_root_dir=target_folder)
+    trainer = L.Trainer(max_epochs=config.epoch + config.attack.tg_epoch, devices=[config.device], logger=logger, default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=train_dl)
     torch.save({
     "tg_before": tg_before,
@@ -143,8 +109,9 @@ def train_mdoel(config: DictConfig):
     print('----------poison----------')
     config_test = config.copy()
     config_test.ratio = 1
+    _, test_ds = get_train_and_test_dataset(config.dataset_name)
     poison_test_ds = PoisonDataset(test_ds, config_test)
-    poison_test_dl = DataLoader(poison_test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
+    poison_test_dl = DataLoader(poison_test_ds, batch_size=config.batch, shuffle=False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
     trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
     res = {
     "model": model.model.state_dict(),

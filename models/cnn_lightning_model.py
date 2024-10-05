@@ -13,38 +13,21 @@ import os
 
 def visualize_metrics(metrics_list, target_folder):
     epochs = [m['epoch'] for m in metrics_list]
-    
-    # 将训练和验证的损失和准确率从 GPU 移动到 CPU
     train_loss = [m['train_loss_epoch'].cpu().item() if isinstance(m['train_loss_epoch'], torch.Tensor) else m['train_loss_epoch'] for m in metrics_list]
     train_acc = [m['train_acc_epoch'].cpu().item() if isinstance(m['train_acc_epoch'], torch.Tensor) else m['train_acc_epoch'] for m in metrics_list]
     val_loss = [m['val_loss_epoch'].cpu().item() if isinstance(m['val_loss_epoch'], torch.Tensor) else m['val_loss_epoch'] for m in metrics_list]
     val_acc = [m['val_acc_epoch'].cpu().item() if isinstance(m['val_acc_epoch'], torch.Tensor) else m['val_acc_epoch'] for m in metrics_list]
-
     fig, ax1 = plt.subplots()
-
-    # 绘制训练损失（实线）
     ax1.plot(epochs, train_loss, label='Train Loss', color='blue', linestyle='-')
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Loss')
-    
-    # 绘制验证损失（虚线）
     ax1.plot(epochs, val_loss, label='Val Loss', color='blue', linestyle='--')
-    
     ax1.legend(loc='upper left')
-
-    # 使用第二个 y 轴来绘制准确率
     ax2 = ax1.twinx()
     ax2.set_ylabel('Accuracy')
-    
-    # 绘制训练准确率（实线）
     ax2.plot(epochs, train_acc, label='Train Accuracy', color='green', linestyle='-')
-    
-    # 绘制验证准确率（虚线）
     ax2.plot(epochs, val_acc, label='Val Accuracy', color='green', linestyle='--')
-    
     ax2.legend(loc='upper right')
-
-    # 保存图表
     plt.savefig(f"{target_folder}/metrics_plot.png")
     plt.close()
 

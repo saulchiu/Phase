@@ -18,14 +18,14 @@ from models.preact_resnet import PreActResNet18
 
 
 if __name__ == '__main__':
-    target_folder = '../' + 'results/cifar10/duba/20241005200125'
+    target_folder = '../' + 'results/cifar10/inba/20241005164918_wind1'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     dataset_name = config.dataset_name
     attack = config.attack.name
     device = 'cpu' 
     visible_tf = 'dct'
-    total = 128
+    total = 1024
     scale, trans, dl = get_dataloader(dataset_name, total)
     res_before = np.zeros((scale, scale, 3), dtype=np.float32)
     res_after = np.zeros((scale, scale, 3), dtype=np.float32)
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     # load model
     if config.model == "resnet18":
         net = PreActResNet18()
-        ld = torch.load(f'{config.path}/results.pth', map_location=device)
+        ld = torch.load(f'{target_folder}/results.pth', map_location=device)
         net.load_state_dict(ld['model'])
         net.eval()
     else:

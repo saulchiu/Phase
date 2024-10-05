@@ -5,50 +5,15 @@ from torch.utils.data.dataloader import DataLoader
 import torchvision
 from tools.inject_backdoor import BadTransform
 import random
-
-
-def get_dataloader(dataset_name: str, batch_size: int):
-    """
-    given dataset name and batch size, return image scale, transform, dataloader
-    :param batch_size:
-    :param dataset_name:
-    :return: tumple (scale, transform, dataloader)
-    """
-    scale, trans, dl = None, None, None
-    if dataset_name == 'cifar10':
-        scale = 32
-        trans = get_benign_transform(dataset_name, scale)
-        ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
-    elif dataset_name == 'celeba':
-        scale = 224
-        trans = Compose([ToTensor(), Resize((scale, scale))])
-        ds = torchvision.datasets.CelebA(root='../data', split='test', transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
-    elif dataset_name == 'gtsrb':
-        scale = 32
-        trans = Compose([ToTensor(), Resize((scale, scale))])
-        ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
-    elif dataset_name == 'imagenette':
-        scale = 224
-        trans = Compose([ToTensor(), Resize((scale, scale))])
-        ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
-    elif dataset_name == 'fer2013':
-        scale = 64
-        trans = Compose([ToTensor(), Resize((scale, scale))])
-        ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
-    elif dataset_name == 'rafdb':
-        scale = 64
-        trans = Compose([ToTensor(), Resize((scale, scale))])
-        ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=trans)
-        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=True, num_workers=0)
-    return scale, trans, dl
-
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
+
+
+def get_dataloader(dataset_name: str, batch_size: int, pin_memory: bool, num_workers: int):
+    train_ds, test_ds = get_train_and_test_dataset(dataset_name)
+    train_dl = DataLoader(train_ds, batch_size, shuffle=True, num_workers=num_workers, drop_last=True, pin_memory=pin_memory)
+    test_dl = DataLoader(test_ds, batch_size, shuffle=False, num_workers=num_workers, drop_last=False, pin_memory=pin_memory)
+    return train_dl, test_dl
 
 class List2Dataset(Dataset):
     def __init__(self, data_list):
@@ -92,7 +57,6 @@ class DeNormalize(torch.nn.Module):
         self.std = torch.tensor(std)
 
     def forward(self, tensor):
-        # 反标准化：tensor * std + mean
         mean = self.mean.to(tensor.device)[None, :, None, None]
         std = self.std.to(tensor.device)[None, :, None, None]
         return tensor * std + mean
@@ -117,7 +81,8 @@ def get_de_normalization(dataset_name):
     return dataset_de_normalization
 
 
-def get_benign_transform(dataset_name, size, train=True, random_crop_padding=4):
+def get_benign_transform(dataset_name, train=True, random_crop_padding=4):
+    _, size = get_dataset_class_and_scale(dataset_name)
     trans_list = [Resize((size, size))]
     if train:
         trans_list.append(RandomCrop((size, size), padding=random_crop_padding))
@@ -129,15 +94,7 @@ def get_benign_transform(dataset_name, size, train=True, random_crop_padding=4):
 
 def get_poison_transform(config, train=True, random_crop_padding=4):
     dataset_name = config.dataset_name
-    if dataset_name in ["gtsrb", "cifar10"]:
-        size = 32
-    elif dataset_name in ['imagenette']:
-        size = 224
-    elif dataset_name in ['fer2013']:
-        size = 64
-    else:
-        raise NotImplementedError(dataset_name)
-
+    _, size = get_dataset_class_and_scale(dataset_name)
     trans_list = [Resize((size, size))]
     if train:
         trans_list.append(RandomCrop((size, size), padding=random_crop_padding))
@@ -167,3 +124,43 @@ class PoisonDataset(Dataset):
 
     def __len__(self):
         return len(self.dataset)
+
+def get_dataset_class_and_scale(dataset_name):
+    if dataset_name == 'imagenette':
+        scale = 224
+        num_classes = 10
+    elif dataset_name == 'cifar10':
+        num_classes = 10
+        scale = 32
+    elif dataset_name == 'gtsrb':
+        num_classes = 43
+        scale = 32
+    elif dataset_name == 'fer2013':
+        num_classes = 8
+        scale = 64
+    elif dataset_name == 'rafdb':
+        num_classes = 7
+        scale = 64
+    else:
+        raise NotImplementedError(dataset_name)
+    return num_classes, scale   
+    
+def get_train_and_test_dataset(dataset_name):
+    if dataset_name == 'imagenette':
+        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_benign_transform(dataset_name))
+        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_benign_transform(dataset_name, train=False))
+    elif dataset_name == 'cifar10':
+        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_benign_transform(dataset_name))
+        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_benign_transform(dataset_name, train=False))
+    elif dataset_name == 'gtsrb':
+        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_benign_transform(dataset_name))
+        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_benign_transform(dataset_name, train=False))
+    elif dataset_name == 'fer2013':
+        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_benign_transform(dataset_name))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_benign_transform(dataset_name, train=False))
+    elif dataset_name == 'rafdb':
+        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_benign_transform(dataset_name))
+        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, train=False))
+    else:
+        raise NotImplementedError(dataset_name)
+    return train_ds, test_ds
