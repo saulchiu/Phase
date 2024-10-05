@@ -11,6 +11,44 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure
 import matplotlib.pyplot as plt
 import os
 
+def visualize_metrics(metrics_list, target_folder):
+    epochs = [m['epoch'] for m in metrics_list]
+    
+    # 将训练和验证的损失和准确率从 GPU 移动到 CPU
+    train_loss = [m['train_loss_epoch'].cpu().item() if isinstance(m['train_loss_epoch'], torch.Tensor) else m['train_loss_epoch'] for m in metrics_list]
+    train_acc = [m['train_acc_epoch'].cpu().item() if isinstance(m['train_acc_epoch'], torch.Tensor) else m['train_acc_epoch'] for m in metrics_list]
+    val_loss = [m['val_loss_epoch'].cpu().item() if isinstance(m['val_loss_epoch'], torch.Tensor) else m['val_loss_epoch'] for m in metrics_list]
+    val_acc = [m['val_acc_epoch'].cpu().item() if isinstance(m['val_acc_epoch'], torch.Tensor) else m['val_acc_epoch'] for m in metrics_list]
+
+    fig, ax1 = plt.subplots()
+
+    # 绘制训练损失（实线）
+    ax1.plot(epochs, train_loss, label='Train Loss', color='blue', linestyle='-')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    
+    # 绘制验证损失（虚线）
+    ax1.plot(epochs, val_loss, label='Val Loss', color='blue', linestyle='--')
+    
+    ax1.legend(loc='upper left')
+
+    # 使用第二个 y 轴来绘制准确率
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Accuracy')
+    
+    # 绘制训练准确率（实线）
+    ax2.plot(epochs, train_acc, label='Train Accuracy', color='green', linestyle='-')
+    
+    # 绘制验证准确率（虚线）
+    ax2.plot(epochs, val_acc, label='Val Accuracy', color='green', linestyle='--')
+    
+    ax2.legend(loc='upper right')
+
+    # 保存图表
+    plt.savefig(f"{target_folder}/metrics_plot.png")
+    plt.close()
+
+
 class BASELightningModule(L.LightningModule):
     def __init__(self, model, config):
         super().__init__()
@@ -37,7 +75,8 @@ class BASELightningModule(L.LightningModule):
         self.schedule.step()
         metrics = {
             "epoch": self.current_epoch,
-            "train_loss_epoch": self.trainer.logged_metrics.get('train_loss', None)
+            "train_loss_epoch": self.trainer.logged_metrics.get('train_loss', None),
+            "train_acc_epoch": self.trainer.logged_metrics.get('train_acc', None)
         }
         if 'val_loss' in self.trainer.logged_metrics:
             metrics["val_loss_epoch"] = self.trainer.logged_metrics['val_loss'].item()
@@ -59,11 +98,15 @@ class BASELightningModule(L.LightningModule):
         with torch.cuda.amp.autocast(enabled=self.config.amp):
             y_p = self.forward(x)
             loss = self.criterion(y_p, y.long())
+        _, predicted = torch.max(y_p, -1)
+        correct = predicted.eq(y).sum().item()
+        total = y.size(0)
         self.scaler.scale(loss).backward()
         self.scaler.step(self.opt)
         self.scaler.update()
         self.opt.zero_grad()
         self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_acc', correct / total, on_step=False, on_epoch=True, prog_bar=True, logger=True)
     
     def validation_step(self, batch, batch_idx):
         x, y = batch
@@ -125,13 +168,21 @@ class INBALightningModule(L.LightningModule):
         self.cur_val_loss = 0.
         self.cur_val_acc = 0.
 
-        self.extra_epochs  =int(self.config.epoch / 10)
+        self.extra_epochs = self.config.attack.tg_epoch
         self.reset_epoch_flag = False
-
+        self.metrics_list = []
         self.model_state_dict_backup = model.state_dict()
-        self.tg_opt = torch.optim.SGD([self.trigger], lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-        self.param_opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.amp)
+        self.tg_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, [self.trigger]),
+                                    lr=self.config.lr, 
+                                    momentum=self.config.momentum, 
+                                    weight_decay=self.config.weight_decay)
+        self.param_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()),
+                                    lr=self.config.lr, 
+                                    momentum=self.config.momentum, 
+                                    weight_decay=self.config.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
+        self.criterion = torch.nn.CrossEntropyLoss()
     
     def init_trigger(self):
         print('-----train trigger first-----')
@@ -155,12 +206,21 @@ class INBALightningModule(L.LightningModule):
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
             self.extra_epochs = -1
         self.scheduler.step()
-        if self.current_epoch != 0 and self.current_epoch % self.config.val_epoch == 0 and self.extra_epochs <= 0:
-            self.validation_step_outputs.append((
-                self.current_epoch,
-                self.cur_val_acc,
-                self.cur_val_loss.item()
-            ))
+        metrics = {
+            "epoch": self.current_epoch,
+            "train_loss_epoch": self.trainer.logged_metrics.get('train_loss', None),
+            "train_acc_epoch": self.trainer.logged_metrics.get('train_acc', None)
+        }
+        if 'val_loss' in self.trainer.logged_metrics:
+            metrics["val_loss_epoch"] = self.trainer.logged_metrics['val_loss'].item()
+        else:
+            metrics["val_loss_epoch"] = None
+
+        if 'val_acc' in self.trainer.logged_metrics:
+            metrics["val_acc_epoch"] = self.trainer.logged_metrics['val_acc'].item()
+        else:
+            metrics["val_acc_epoch"] = None
+        self.metrics_list.append(metrics)
 
 
     def training_step(self, batch):
@@ -204,44 +264,46 @@ class INBALightningModule(L.LightningModule):
             y_list = (torch.zeros(size=(x_p_list.shape[0],), device=x_p_list.device) + self.target_label).long()
             loss_poison = torch.nn.functional.cross_entropy(self.forward(x_p_list), y_list)
             loss_poison = loss_poison + (1. - ssim_tensor) * self.config.attack.ssim_coeff
-            self.tg_opt.zero_grad()
             self.manual_backward(loss_poison, retain_graph=True)
             self.tg_opt.step()
+            self.tg_opt.zero_grad()
         y_p = self.forward(x)
-        loss = torch.nn.functional.cross_entropy(y_p, y)
+        loss = self.criterion(y_p, y.long())
+        _, predicted = torch.max(y_p, -1)
+        correct = predicted.eq(y).sum().item()
+        total = y.size(0)
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.param_opt)
+        self.scaler.update()
         self.param_opt.zero_grad()
-        self.manual_backward(loss)
-        self.param_opt.step()
-        # return loss
+        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_acc', correct / total, on_step=False, on_epoch=True, prog_bar=True, logger=True)
     
-    def validation_step(self, batch):
-        self.model.eval()
-        # self.ema.eval()
+    def validation_step(self, batch, batch_idx):
         x, y = batch
+        x = x.to(self.device, non_blocking=self.config.non_blocking)
+        y = y.to(self.device, non_blocking=self.config.non_blocking)
         y_p = self.forward(x)
-        loss = torch.nn.functional.cross_entropy(y_p, y)
-        pred_labels = torch.argmax(y_p, dim=1)
-        correct = (pred_labels == y).sum().item()
-        accuracy = correct / x.shape[0]
-        # self.validation_step_outputs.append(accuracy)
-        self.log('val_loss', loss, prog_bar=True)
-        self.log('val_accuracy', accuracy, prog_bar=True)
-        self.cur_val_loss = loss
-        self.cur_val_acc = accuracy
-        return accuracy
-    
-    def test_step(self, batch):
-        self.model.eval()
-        # self.ema.eval()
+        loss = self.criterion(y_p, y.long())
+        _, predicted = torch.max(y_p, -1)
+        correct = predicted.eq(y).sum().item()
+        total = y.size(0)
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('val_acc', correct / total, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+
+
+    def test_step(self, batch, batch_idx):
         x, y = batch
+        x = x.to(self.device, non_blocking=self.config.non_blocking)
+        y = y.to(self.device, non_blocking=self.config.non_blocking)
         y_p = self.forward(x)
-        loss = torch.nn.functional.cross_entropy(y_p, y)
-        pred_labels = torch.argmax(y_p, dim=1)
-        correct = (pred_labels == y).sum().item()
-        accuracy = correct / x.shape[0]
-        self.log('test_loss', loss, prog_bar=True)
-        self.log('test_accuracy', accuracy, prog_bar=True)
-        return {"test_loss": loss, "test_accuracy": accuracy}
+        loss = self.criterion(y_p, y.long())
+        _, predicted = torch.max(y_p, -1)
+        correct = predicted.eq(y).sum().item()
+        total = y.size(0)
+        self.log('test_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('test_acc', correct / total, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+
 
     def configure_optimizers(self):
         # optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)

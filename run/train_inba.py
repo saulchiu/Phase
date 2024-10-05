@@ -17,7 +17,7 @@ from tools.dataset import get_dataset_normalization
 from tools.inject_backdoor import patch_trigger
 from tools.dataset import get_dataloader
 import torch.nn.functional as F
-from models.cnn_lightning_model import INBALightningModule
+from models.cnn_lightning_model import INBALightningModule, visualize_metrics
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from tools.time import now
@@ -31,21 +31,17 @@ from tools.dataset import get_de_normalization, get_dataset_normalization, get_b
 from repvgg_pytorch.repvgg import RepVGG
 from torchvision.models.convnext import ConvNeXt, CNBlockConfig
 from tools.utils import manual_seed
+from tools.dataset import PoisonDataset
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
     seed = config.seed
     manual_seed(seed)
-    
-    ratio = config.ratio
+
     dataset_name = config.dataset_name
     attack_name = config.attack.name
-    target_label = config.target_label
     nw = config.num_workers
     epoch = config.epoch
-    if ratio > 0:
-        epoch += int(epoch / 10)
-    wind = config.attack.wind
     device = config.device
 
     # save config, and source file
@@ -89,8 +85,8 @@ def train_mdoel(config: DictConfig):
         test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, scale, train=False))
     else:
         raise NotImplementedError(dataset_name)
-    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw)
-    test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw)
+    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
+    test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
 
     if config.model == "resnet18":
         net = PreActResNet18(num_classes=num_classes).to(f'cuda:{device}')
@@ -131,67 +127,37 @@ def train_mdoel(config: DictConfig):
     tg_before = model.trigger.detach().clone()
     logger = CSVLogger(save_dir=target_folder, name='log')
     assert config.epoch > config.val_epoch
-    trainer = L.Trainer(max_epochs=epoch, devices=[device], logger=logger, default_root_dir=target_folder, check_val_every_n_epoch=config.val_epoch)
-    trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=test_dl)
+    assert config.epoch > config.attack.tg_epoch
+    trainer = L.Trainer(max_epochs=config.epoch + config.attack.tg_epoch, devices=[device], logger=logger, default_root_dir=target_folder)
+    trainer.fit(model=model, train_dataloaders=train_dl)
+    torch.save({
+    "tg_before": tg_before,
+    "tg_after": model.trigger
+    },
+    f'{target_folder}/trigger.pth')
     if config.model == "repvgg":
         model.model.deploy =True
     model.eval()
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
     print('----------poison----------')
-    poison_test_list = []
-    for x, y in iter(test_dl):
-        for i in range(x.shape[0]):
-            if y[i] == target_label:
-                continue
-            # craft poison data
-            tg_pos = 0 if config.attack.rand_pos == 0 else random.randint(0, wind)
-            x_p = get_de_normalization(dataset_name)(x[i]).squeeze()
-            x_p *= 255.
-            x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
-            x_yuv = torch.clip(x_yuv, 0, 255)
-            x_u = x_yuv[config.attack.target_channel]
-            x_u_fft = torch.fft.fft2(x_u)
-            x_u_fft_imag = torch.imag(x_u_fft)
-            x_u_fft_imag[tg_pos:(tg_pos+wind), tg_pos:(tg_pos+wind)] = model.trigger
-            x_u_fft = torch.real(x_u_fft) + 1j * x_u_fft_imag
-            x_u = torch.real(torch.fft.ifft2(x_u_fft))
-
-            x_yuv[config.attack.target_channel] = x_u
-            x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
-            x_p = torch.clip(x_p, 0, 255)
-            x_p /= 255.
-
-            # import matplotlib.pylab as plt
-            #
-            # _, ax = plt.subplots(1, 2)
-            # ax[0].imshow(tensor2ndarray(x_rgb).astype(np.uint8))
-            # ax[1].imshow(tensor2ndarray(x_p).astype(np.uint8))
-            # plt.show()
-            # print(structural_similarity(tensor2ndarray(x_rgb).astype(np.uint8), tensor2ndarray(x_p).astype(np.uint8), win_size=3))
-        
-            x[i] = x_p
-            y[i] = target_label
-            poison_test_list.append((x[i], y[i]))
-    print(len(poison_test_list))
-    poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), batch_size=batch, shuffle=False, num_workers=nw)
+    config_test = config.copy()
+    config_test.ratio = 1
+    poison_test_ds = PoisonDataset(test_ds, config_test)
+    poison_test_dl = DataLoader(poison_test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
     trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
-    torch.save({
-        "tg_before": tg_before,
-        "tg_after": model.trigger
-    }, f'{target_folder}/trigger.pth')
     res = {
     "model": model.model.state_dict(),
     "param_opt": model.param_opt.state_dict(),
     "tg_opt": model.tg_opt.state_dict(),
-    "schedule": model.schedule.state_dict(),
+    "schedule": model.scheduler.state_dict(),
     "config": config,
     "epoch": model.current_epoch,
     "tg_before": tg_before,
     "tg_after": model.trigger,
     }
-    model.plot_metrics()
     torch.save(res, f"{target_folder}/results.pth")
+    visualize_metrics(model.metrics_list, target_folder)
 
 
 if __name__ == '__main__':

@@ -31,29 +31,7 @@ from tools.inject_backdoor import BadTransform
 import matplotlib.pyplot as plt
 from pytorch_lightning.loggers import TensorBoardLogger
 
-def visualize_metrics(metrics_list, target_folder):
-    epochs = [m['epoch'] for m in metrics_list]
-    train_loss = [m['train_loss_epoch'].cpu().item() if isinstance(m['train_loss_epoch'], torch.Tensor) else m['train_loss_epoch'] for m in metrics_list]  # 移动到CPU
-    val_loss = [m['val_loss_epoch'].cpu().item() if isinstance(m['val_loss_epoch'], torch.Tensor) else m['val_loss_epoch'] for m in metrics_list]  # 移动到CPU
-    val_acc = [m['val_acc_epoch'].cpu().item() if isinstance(m['val_acc_epoch'], torch.Tensor) else m['val_acc_epoch'] for m in metrics_list]  # 移动到CPU
 
-    fig, ax1 = plt.subplots()
-
-    # 画出训练损失
-    ax1.plot(epochs, train_loss, label='Train Loss', color='blue', linestyle='--')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
-    ax1.legend(loc='upper left')
-
-    # 画出验证损失
-    ax2 = ax1.twinx()
-    ax2.plot(epochs, val_loss, label='Val Loss', color='red')
-    ax2.set_ylabel('Val Loss')
-    ax2.legend(loc='upper right')
-
-    # 保存图表
-    plt.savefig(f"{target_folder}/metrics_plot.png")
-    plt.close()
 
 
 
@@ -112,7 +90,7 @@ def train_mdoel(config: DictConfig):
         test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, scale, train=False))
     else:
         raise NotImplementedError(dataset_name)
-    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
+    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
     test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
 
     net = PreActResNet18(num_classes=num_classes).to('cuda:0')
@@ -120,7 +98,7 @@ def train_mdoel(config: DictConfig):
     model = BASELightningModule(net, config)
     # logger = TensorBoardLogger(save_dir=target_folder)
     logger = CSVLogger(save_dir=target_folder, name='log')
-    assert config.epoch > config.val_epoch
+    assert config.epoch >= config.val_epoch
     trainer = L.Trainer(max_epochs=epoch, devices=[0], logger=logger, default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=poison_train_dl)
     print('----------benign----------')

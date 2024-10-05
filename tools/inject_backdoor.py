@@ -28,21 +28,20 @@ class BadTransform(object):
         self.config = config
 
     def __call__(self, x_c: torch.tensor):
-        if random.random() > self.config.ratio:
-            return x_c
         from tools.dataset import get_de_normalization
         x_p = get_de_normalization(self.config.dataset_name)(x_c).squeeze()
-        x_p = patch_trigger(x_p, self.config.attack)
+        x_p = patch_trigger(x_p, self.config)
         return x_p
 
 
-def patch_trigger(x_0: torch.Tensor, attack_config) -> torch.Tensor:
+def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
     """
     add a trigger to the original image given attack method
     :param x_0:
     :param attack_name: e.g., noise, badnet, blended, ftrojan, lf (low frequency), ctrl, wanet
     :return: poison image with trigger
     """
+    attack_config = config.attack
     attack_name = attack_config.name
     c, h, w = x_0.shape
     trans = Compose([ToTensor(), Resize((h, h))])
@@ -205,36 +204,18 @@ def patch_trigger(x_0: torch.Tensor, attack_config) -> torch.Tensor:
         x_re = np.clip(x_re, 0, 1)
         return ndarray2tensor(x_re * 255.)
     elif attack_name == 'inba':
-        # x = tensor2ndarray(x_0)
-        # wind = 32
-        # x_yuv = rgb2yuv(x)
-        # x_fft = np.fft.fft2(x_yuv[:, :, 1])
-        # imag_part = x_fft.imag
-        # tg: torch.tensor = torch.load('../results/gtsrb/inba/20240928121249/trigger.pth')["tg_after"]
-        # imag_part[0:wind, 0:wind] = tg.detach().numpy()
-        # x_fft = x_fft.real + imag_part * 1j
-        # x_yuv[:, :, 1] = np.fft.ifft2(x_fft).real
-        # x_re = yuv2rgb(x_yuv)
-        # x_re = ndarray2tensor(x_re)
-        # x_re = torch.clip(x_re, 0, 1)
-        # return x_re
-        config = args.__dict__['config']
         x_torch = x_0.detach().clone()
         x_torch *= 255.
         x_yuv = torch.stack(rgb_to_yuv(x_torch[0], x_torch[1], x_torch[2]), dim=0)
         x_yuv = torch.clip(x_yuv, 0, 255)
         tg: torch.tensor = torch.load(f'{config.path}/trigger.pth')["tg_after"]
-
-        # inject trigger
-        # tg_size = config.attack.wind
-        # tg_pos = random.randint(0, tg_size)
         tg_size = config.attack.wind
-        tg_pos = 0
-        x_fft = torch.fft.fft2(x_yuv[1])
+        tg_pos = 0 if config.attack.rand_pos == 0 else random.randint(0, tg_size)
+        x_fft = torch.fft.fft2(x_yuv[config.attack.target_channel])
         x_imag = torch.imag(x_fft)
         x_imag[tg_pos:(tg_pos + tg_size), tg_pos:(tg_pos + tg_size)] = tg
         x_fft = torch.real(x_fft) + 1j * x_imag
-        x_yuv[1] = torch.real(torch.fft.ifft2(x_fft))
+        x_yuv[config.attack.target_channel] = torch.real(torch.fft.ifft2(x_fft))
 
         x_rgb = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
         x_rgb = torch.clip(x_rgb, 0, 255)

@@ -15,7 +15,7 @@ device: 0
 batch: 64
 model: resnet18
 seed: 42
-val_epoch: 20
+val_epoch: 1
 # ema_update_every: 100
 
 defaults:
