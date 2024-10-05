@@ -12,7 +12,7 @@ non_blocking: True
 pin_memory: True
 path: None
 device: 0
-batch: 128
+batch: 64
 model: resnet18
 seed: 42
 val_epoch: 20

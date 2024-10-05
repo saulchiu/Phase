@@ -1,6 +1,10 @@
+import sys
+sys.path.append('../')
 from torchvision.transforms.transforms import Compose, ToTensor, Resize, Normalize, RandomCrop, RandomHorizontalFlip
 from torch.utils.data.dataloader import DataLoader
 import torchvision
+from tools.inject_backdoor import BadTransform
+import random
 
 
 def get_dataloader(dataset_name: str, batch_size: int):
@@ -122,3 +126,44 @@ def get_benign_transform(dataset_name, size, train=True, random_crop_padding=4):
     trans_list.append(ToTensor())
     trans_list.append(get_dataset_normalization(dataset_name))
     return Compose(trans_list)
+
+def get_poison_transform(config, train=True, random_crop_padding=4):
+    dataset_name = config.dataset_name
+    if dataset_name in ["gtsrb", "cifar10"]:
+        size = 32
+    elif dataset_name in ['imagenette']:
+        size = 224
+    elif dataset_name in ['fer2013']:
+        size = 64
+    else:
+        raise NotImplementedError(dataset_name)
+
+    trans_list = [Resize((size, size))]
+    if train:
+        trans_list.append(RandomCrop((size, size), padding=random_crop_padding))
+        if dataset_name == 'cifar10':
+            trans_list.append(RandomHorizontalFlip())
+    trans_list.append(ToTensor())
+    trans_list.append(get_dataset_normalization(dataset_name))
+    trans_list.append(BadTransform(config))
+    return Compose(trans_list)
+
+
+
+class PoisonDataset(Dataset):
+    def __init__(self, dataset, config):
+        self.dataset = dataset
+        self.transform = BadTransform(config)
+        self.config = config
+
+    def __getitem__(self, index):
+        x, y = self.dataset[index]
+        do_poison = random.random() < self.config.ratio
+        if self.transform is not None and do_poison:
+            x = self.transform(x)
+        if do_poison:
+            y = self.config.target_label
+        return x, y
+
+    def __len__(self):
+        return len(self.dataset)

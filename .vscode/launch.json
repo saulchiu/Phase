@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/exp",
-            "args": ["ratio=0.05", "attack=badnet"]
+            "args": ["attack=benign", "epoch=3", "batch=64", "val_epoch=1"]
         }
     ]
 }

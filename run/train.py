@@ -14,7 +14,7 @@ from tools.dataset import List2Dataset
 import numpy as np
 from tools.dataset import get_dataset_normalization, get_de_normalization
 from tools.inject_backdoor import patch_trigger 
-from tools.dataset import get_dataloader, get_benign_transform
+from tools.dataset import get_dataloader, get_benign_transform, get_poison_transform
 import torch.nn.functional as F
 import cv2
 from models.cnn_lightning_model import BASELightningModule
@@ -26,6 +26,36 @@ import shutil
 import yaml
 from pytorch_lightning.loggers import CSVLogger
 from tools.utils import manual_seed
+from tools.dataset import PoisonDataset
+from tools.inject_backdoor import BadTransform
+import matplotlib.pyplot as plt
+from pytorch_lightning.loggers import TensorBoardLogger
+
+def visualize_metrics(metrics_list, target_folder):
+    epochs = [m['epoch'] for m in metrics_list]
+    train_loss = [m['train_loss_epoch'].cpu().item() if isinstance(m['train_loss_epoch'], torch.Tensor) else m['train_loss_epoch'] for m in metrics_list]  # 移动到CPU
+    val_loss = [m['val_loss_epoch'].cpu().item() if isinstance(m['val_loss_epoch'], torch.Tensor) else m['val_loss_epoch'] for m in metrics_list]  # 移动到CPU
+    val_acc = [m['val_acc_epoch'].cpu().item() if isinstance(m['val_acc_epoch'], torch.Tensor) else m['val_acc_epoch'] for m in metrics_list]  # 移动到CPU
+
+    fig, ax1 = plt.subplots()
+
+    # 画出训练损失
+    ax1.plot(epochs, train_loss, label='Train Loss', color='blue', linestyle='--')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.legend(loc='upper left')
+
+    # 画出验证损失
+    ax2 = ax1.twinx()
+    ax2.plot(epochs, val_loss, label='Val Loss', color='red')
+    ax2.set_ylabel('Val Loss')
+    ax2.legend(loc='upper right')
+
+    # 保存图表
+    plt.savefig(f"{target_folder}/metrics_plot.png")
+    plt.close()
+
+
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
@@ -61,6 +91,10 @@ def train_mdoel(config: DictConfig):
         scale = 32
         train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_benign_transform(dataset_name, scale))
         test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_benign_transform(dataset_name, scale, train=False))
+        config_test = config.copy()
+        config_test.ratio = 1
+        poison_train_ds = PoisonDataset(train_ds, config)
+        poison_test_ds = PoisonDataset(train_ds, config_test)
     elif dataset_name == 'gtsrb':
         num_classes = 43
         scale = 32
@@ -78,46 +112,21 @@ def train_mdoel(config: DictConfig):
         test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, scale, train=False))
     else:
         raise NotImplementedError(dataset_name)
-    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
+    train_dl = DataLoader(dataset=train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
     test_dl = DataLoader(dataset=test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
-    poison_train_list = []
-    for x, y in iter(train_dl):
-        for i in range(x.shape[0]):
-            if random.random() < ratio and attack_name != 'benign':  # craft poison data
-                x_re = get_de_normalization(dataset_name)(x[i]).squeeze()
-                # x_re = x[i]
-                x_re = patch_trigger(x_re, config.attack)
-                x[i] = x_re
-                y[i] = target_label
-            poison_train_list.append((x[i], y[i]))
-
-    poison_test_list = []
-    if attack_name != 'benign':
-        for x, y in iter(test_dl):
-            for i in range(x.shape[0]):
-                if y[i] == target_label:
-                    continue
-                x_re = get_de_normalization(dataset_name)(x[i]).squeeze()
-                # x_re = x[i]
-                x_re = patch_trigger(x_re, config.attack)
-                x[i] = x_re
-                y[i] = target_label
-                poison_test_list.append((x[i], y[i]))
-        print(len(poison_train_list), len(poison_test_list))
 
     net = PreActResNet18(num_classes=num_classes).to('cuda:0')
-    poison_train_dl = DataLoader(dataset=List2Dataset(poison_train_list), 
-                                 batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
+    poison_train_dl = DataLoader(poison_train_ds, batch_size=batch, shuffle=True, num_workers=nw, drop_last=True, pin_memory=config.pin_memory)
     model = BASELightningModule(net, config)
+    # logger = TensorBoardLogger(save_dir=target_folder)
     logger = CSVLogger(save_dir=target_folder, name='log')
     assert config.epoch > config.val_epoch
-    trainer = L.Trainer(max_epochs=epoch, devices=[0], logger=logger, default_root_dir=target_folder, check_val_every_n_epoch=config.val_epoch)
-    trainer.fit(model=model, train_dataloaders=poison_train_dl, val_dataloaders=test_dl)
+    trainer = L.Trainer(max_epochs=epoch, devices=[0], logger=logger, default_root_dir=target_folder)
+    trainer.fit(model=model, train_dataloaders=poison_train_dl)
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
     if attack_name != 'benign':
-        poison_test_dl = DataLoader(dataset=List2Dataset(poison_test_list), 
-                                    batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
+        poison_test_dl = DataLoader(poison_test_ds, batch_size=batch, shuffle=False, num_workers=nw, drop_last=False, pin_memory=config.pin_memory)
         print('----------poison----------')
         trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
     res = {
@@ -127,8 +136,8 @@ def train_mdoel(config: DictConfig):
         "config": config,
         "epoch": model.current_epoch,
     }
-    model.plot_metrics()
     torch.save(res, f"{target_folder}/results.pth")
+    # visualize_metrics(model.metrics_list, target_folder)
 
 
 

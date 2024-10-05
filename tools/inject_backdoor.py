@@ -21,7 +21,19 @@ from PIL import Image
 import torch.nn.functional as F
 from omegaconf import OmegaConf, DictConfig
 import random
-from tools.dataset import get_de_normalization
+
+
+class BadTransform(object):
+    def __init__(self, config) -> None:
+        self.config = config
+
+    def __call__(self, x_c: torch.tensor):
+        if random.random() > self.config.ratio:
+            return x_c
+        from tools.dataset import get_de_normalization
+        x_p = get_de_normalization(self.config.dataset_name)(x_c).squeeze()
+        x_p = patch_trigger(x_p, self.config.attack)
+        return x_p
 
 
 def patch_trigger(x_0: torch.Tensor, attack_config) -> torch.Tensor:
@@ -34,7 +46,9 @@ def patch_trigger(x_0: torch.Tensor, attack_config) -> torch.Tensor:
     attack_name = attack_config.name
     c, h, w = x_0.shape
     trans = Compose([ToTensor(), Resize((h, h))])
-    if attack_name == 'blended':
+    if attack_name == "benign":
+        return x_0
+    elif attack_name == 'blended':
         tg = Image.open(attack_config.tg_path)
         tg = trans(tg)
         x_0 = x_0 * (1 - attack_config.blended_coeff) + tg * attack_config.blended_coeff

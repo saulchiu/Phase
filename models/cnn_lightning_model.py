@@ -18,7 +18,7 @@ class BASELightningModule(L.LightningModule):
         self.model = model
         # self.ema = EMA(self.model, update_every=self.config.ema_update_every)
         # self.ema.to(device=self.device)
-        self.validation_step_outputs = []
+        self.metrics_list = []
         self.cur_val_loss = 0.
         self. cur_val_acc = 0.
         self.automatic_optimization = False
@@ -28,12 +28,27 @@ class BASELightningModule(L.LightningModule):
                                     momentum=self.config.momentum, 
                                     weight_decay=self.config.weight_decay)
         self.schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, T_max=config.epoch)
+        self.criterion = torch.nn.CrossEntropyLoss()
 
     def forward(self, x):
         return self.model(x)
 
     def on_train_epoch_end(self):
         self.schedule.step()
+        metrics = {
+            "epoch": self.current_epoch,
+            "train_loss_epoch": self.trainer.logged_metrics.get('train_loss', None)
+        }
+        if 'val_loss' in self.trainer.logged_metrics:
+            metrics["val_loss_epoch"] = self.trainer.logged_metrics['val_loss'].item()
+        else:
+            metrics["val_loss_epoch"] = None
+
+        if 'val_acc' in self.trainer.logged_metrics:
+            metrics["val_acc_epoch"] = self.trainer.logged_metrics['val_acc'].item()
+        else:
+            metrics["val_acc_epoch"] = None
+        self.metrics_list.append(metrics)
 
     def training_step(self, batch):
         self.model.train()
@@ -43,49 +58,37 @@ class BASELightningModule(L.LightningModule):
         y = y.to(self.device, non_blocking=self.config.non_blocking)
         with torch.cuda.amp.autocast(enabled=self.config.amp):
             y_p = self.forward(x)
-            loss = torch.nn.functional.cross_entropy(y_p, y)
+            loss = self.criterion(y_p, y.long())
         self.scaler.scale(loss).backward()
         self.scaler.step(self.opt)
         self.scaler.update()
         self.opt.zero_grad()
-        # self.ema.update()
-        # return loss
+        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
     
-    def validation_step(self, batch):
-        self.model.eval()
-        self.model.to(self.device, non_blocking=self.config.non_blocking)
+    def validation_step(self, batch, batch_idx):
         x, y = batch
         x = x.to(self.device, non_blocking=self.config.non_blocking)
         y = y.to(self.device, non_blocking=self.config.non_blocking)
         y_p = self.forward(x)
-        loss = torch.nn.functional.cross_entropy(y_p, y)
+        loss = self.criterion(y_p, y.long())
         _, predicted = torch.max(y_p, -1)
-        correct = predicted.eq(y).sum()
-        accuracy = correct / x.shape[0]
-        # self.validation_step_outputs.append(accuracy)
-        self.log('val_loss', loss, prog_bar=True)
-        self.log('val_accuracy', accuracy, prog_bar=True)
-        self.cur_val_loss = loss
-        self.cur_val_acc = accuracy
-        self.validation_step_outputs.append((
-            self.current_epoch,
-            self.cur_val_acc,
-            self.cur_val_loss.item()
-        ))
-        return accuracy
-    
-    def test_step(self, batch):
-        self.model.eval()
-        # self.ema.eval()
+        correct = predicted.eq(y).sum().item()
+        total = y.size(0)
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('val_acc', correct / total, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+
+
+    def test_step(self, batch, batch_idx):
         x, y = batch
+        x = x.to(self.device, non_blocking=self.config.non_blocking)
+        y = y.to(self.device, non_blocking=self.config.non_blocking)
         y_p = self.forward(x)
-        loss = torch.nn.functional.cross_entropy(y_p, y)
-        pred_labels = torch.argmax(y_p, dim=1)
-        correct = (pred_labels == y).sum().item()
-        accuracy = correct / x.shape[0]
-        self.log('test_loss', loss, prog_bar=True)
-        self.log('test_accuracy', accuracy, prog_bar=True)
-        return {"test_loss": loss, "test_accuracy": accuracy}
+        loss = self.criterion(y_p, y.long())
+        _, predicted = torch.max(y_p, -1)
+        correct = predicted.eq(y).sum().item()
+        total = y.size(0)
+        self.log('test_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('test_acc', correct / total, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         # optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
@@ -100,38 +103,6 @@ class BASELightningModule(L.LightningModule):
         # }
         return None
 
-    def plot_metrics(self):
-        target_folder = self.config.path
-        epochs = [output[0] for output in self.validation_step_outputs]
-        val_accuracies = [output[1] for output in self.validation_step_outputs]
-        val_losses = [output[2] for output in self.validation_step_outputs]
-        
-        fig, ax1 = plt.subplots(figsize=(8, 6))  # Adjust figure size
-        ax1.set_xlabel('Epoch')
-        
-        # Plot validation accuracy with improved line style
-        ax1.set_ylabel('Validation Accuracy', color='tab:blue')
-        ax1.plot(epochs, val_accuracies, color='tab:blue', linewidth=2, marker='o', linestyle='-', label="Accuracy")
-        ax1.tick_params(axis='y', labelcolor='tab:blue')
-
-        ax2 = ax1.twinx()
-        
-        # Plot validation loss with improved line style
-        ax2.set_ylabel('Validation Loss', color='tab:red')
-        ax2.plot(epochs, val_losses, color='tab:red', linewidth=2, marker='x', linestyle='--', label="Loss")
-        ax2.tick_params(axis='y', labelcolor='tab:red')
-        
-        # Adding a legend
-        fig.suptitle('Validation Accuracy and Loss over Epochs', fontsize=14)
-        fig.tight_layout()
-        
-        # Save the plot
-        if not os.path.exists(target_folder):
-            os.makedirs(target_folder)
-        file_path = os.path.join(target_folder, 'val_metrics_improved.png')
-        plt.savefig(file_path, dpi=300)  # Higher DPI for better quality
-        plt.close()
-        print(f"Plot saved to {file_path}")
 
 
 
@@ -184,6 +155,12 @@ class INBALightningModule(L.LightningModule):
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
             self.extra_epochs = -1
         self.scheduler.step()
+        if self.current_epoch != 0 and self.current_epoch % self.config.val_epoch == 0 and self.extra_epochs <= 0:
+            self.validation_step_outputs.append((
+                self.current_epoch,
+                self.cur_val_acc,
+                self.cur_val_loss.item()
+            ))
 
 
     def training_step(self, batch):
@@ -251,11 +228,6 @@ class INBALightningModule(L.LightningModule):
         self.log('val_accuracy', accuracy, prog_bar=True)
         self.cur_val_loss = loss
         self.cur_val_acc = accuracy
-        self.validation_step_outputs.append((
-            self.current_epoch,
-            self.cur_val_acc,
-            self.cur_val_loss.item()
-        ))
         return accuracy
     
     def test_step(self, batch):
@@ -290,35 +262,3 @@ class INBALightningModule(L.LightningModule):
         # )
         return None
 
-    def plot_metrics(self):
-        target_folder = self.config.path
-        epochs = [output[0] for output in self.validation_step_outputs]
-        val_accuracies = [output[1] for output in self.validation_step_outputs]
-        val_losses = [output[2] for output in self.validation_step_outputs]
-        
-        fig, ax1 = plt.subplots(figsize=(8, 6))  # Adjust figure size
-        ax1.set_xlabel('Epoch')
-        
-        # Plot validation accuracy with improved line style
-        ax1.set_ylabel('Validation Accuracy', color='tab:blue')
-        ax1.plot(epochs, val_accuracies, color='tab:blue', linewidth=2, marker='o', linestyle='-', label="Accuracy")
-        ax1.tick_params(axis='y', labelcolor='tab:blue')
-
-        ax2 = ax1.twinx()
-        
-        # Plot validation loss with improved line style
-        ax2.set_ylabel('Validation Loss', color='tab:red')
-        ax2.plot(epochs, val_losses, color='tab:red', linewidth=2, marker='x', linestyle='--', label="Loss")
-        ax2.tick_params(axis='y', labelcolor='tab:red')
-        
-        # Adding a legend
-        fig.suptitle('Validation Accuracy and Loss over Epochs', fontsize=14)
-        fig.tight_layout()
-        
-        # Save the plot
-        if not os.path.exists(target_folder):
-            os.makedirs(target_folder)
-        file_path = os.path.join(target_folder, 'val_metrics_improved.png')
-        plt.savefig(file_path, dpi=300)  # Higher DPI for better quality
-        plt.close()
-        print(f"Plot saved to {file_path}")
