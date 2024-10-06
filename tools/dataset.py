@@ -115,7 +115,7 @@ class PoisonDataset(Dataset):
 
     def __getitem__(self, index):
         x, y = self.dataset[index]
-        do_poison = random.random() < self.config.ratio
+        do_poison = (random.random() < self.config.ratio) and self.config.attack.name != 'benign'
         if self.transform is not None and do_poison:
             x = self.transform(x)
         if do_poison:
@@ -124,6 +124,19 @@ class PoisonDataset(Dataset):
 
     def __len__(self):
         return len(self.dataset)
+
+class PartialDataset(Dataset):
+    def __init__(self, dataset, partial_ratio):
+        self.dataset = dataset
+        self.size = int(len(dataset) * partial_ratio)
+        self.indices = random.sample(range(len(dataset)), self.size)
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, idx):
+        return self.dataset[self.indices[idx]]
+
 
 def get_dataset_class_and_scale(dataset_name):
     if dataset_name == 'imagenette':

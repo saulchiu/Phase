@@ -10,6 +10,7 @@ And to adapt different image size, we replace the Avgpool2d with its adaptive ve
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+# from mask_batchnorm import MaskBatchNorm2d
 
 
 class PreActBlock(nn.Module):
@@ -17,11 +18,15 @@ class PreActBlock(nn.Module):
 
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1):
+    def __init__(self, in_planes, planes, stride=1, norm_layer=None):
         super(PreActBlock, self).__init__()
-        self.bn1 = nn.BatchNorm2d(in_planes)
+        if norm_layer is None:
+            self._norm_layer = nn.BatchNorm2d
+        else:
+            self._norm_layer = norm_layer
+        self.bn1 =self._norm_layer(in_planes)
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = self._norm_layer(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.ind = None
 
@@ -47,13 +52,17 @@ class PreActBottleneck(nn.Module):
 
     expansion = 4
 
-    def __init__(self, in_planes, planes, stride=1):
+    def __init__(self, in_planes, planes, stride=1, norm_layer=None):
+        if norm_layer is None:
+            self._norm_layer = nn.BatchNorm2d
+        else:
+            self._norm_layer = norm_layer
         super(PreActBottleneck, self).__init__()
-        self.bn1 = nn.BatchNorm2d(in_planes)
+        self.bn1 = self._norm_layer(in_planes)
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = self._norm_layer(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(planes)
+        self.bn3 = self._norm_layer(planes)
         self.conv3 = nn.Conv2d(planes, self.expansion * planes, kernel_size=1, bias=False)
 
         if stride != 1 or in_planes != self.expansion * planes:
@@ -72,8 +81,9 @@ class PreActBottleneck(nn.Module):
 
 
 class PreActResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10):
+    def __init__(self, block, num_blocks, num_classes=10, norm_layer=None):
         super(PreActResNet, self).__init__()
+        self._norm_layer = norm_layer
         self.in_planes = 64
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
@@ -88,7 +98,7 @@ class PreActResNet(nn.Module):
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, planes, stride))
+            layers.append(block(self.in_planes, planes, stride, self._norm_layer))
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
@@ -104,8 +114,8 @@ class PreActResNet(nn.Module):
         return out
 
 
-def PreActResNet18(num_classes=10):
-    return PreActResNet(PreActBlock, [2, 2, 2, 2], num_classes=num_classes)
+def PreActResNet18(num_classes=10, norm_layer=None):
+    return PreActResNet(PreActBlock, [2, 2, 2, 2], num_classes=num_classes, norm_layer=norm_layer)
 
 
 def PreActResNet34():

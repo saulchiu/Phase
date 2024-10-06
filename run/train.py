@@ -54,6 +54,9 @@ def train_mdoel(config: DictConfig):
     num_classes, _ = get_dataset_class_and_scale(config.dataset_name)
     if config.model == "resnet18":
         net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
+    elif config.model == "rnp":
+        from models.resnet_cifar import resnet18
+        net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
     elif config.model == "repvgg":
         net = RepVGG(num_blocks=[4, 6, 16, 1], num_classes=num_classes, width_multiplier=[3, 3, 3, 5]).to(device=f'cuda:{config.device}')
     elif config.model == "convnext":
