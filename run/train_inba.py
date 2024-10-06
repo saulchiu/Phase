@@ -57,7 +57,7 @@ def train_mdoel(config: DictConfig):
     if config.model == "resnet18":
         net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
     elif config.model == "repvgg":
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[0.75, 0.75, 0.75, 2.5]).to(device=f'cuda:{config.device}')
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
     elif config.model == "convnext":
         if config.dataset_name == 'cifar10':
             channel_list = [96, 192, 384, 768]

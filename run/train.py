@@ -58,7 +58,7 @@ def train_mdoel(config: DictConfig):
         from models.resnet_cifar import resnet18
         net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
     elif config.model == "repvgg":
-        net = RepVGG(num_blocks=[4, 6, 16, 1], num_classes=num_classes, width_multiplier=[3, 3, 3, 5]).to(device=f'cuda:{config.device}')
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
     elif config.model == "convnext":
         if config.dataset_name == 'cifar10':
             channel_list = [96, 192, 384, 768]
@@ -96,6 +96,8 @@ def train_mdoel(config: DictConfig):
     trainer = L.Trainer(max_epochs=config.epoch, devices=[config.device], logger=logger, default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=poison_train_dl)
     print('----------benign----------')
+    if config.model == "repvgg":
+        model.model.deploy =True
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
     if config.attack.name != 'benign':
         poison_test_dl = DataLoader(poison_test_ds, batch_size=config.batch, shuffle=False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
