@@ -188,7 +188,7 @@ from models.preact_resnet import PreActResNet18
 from models.mask_batchnorm import MaskBatchNorm2d
 
 def main(args):
-    target_folder = '../' + 'results/cifar10/inba/20241006063029_wind32'
+    target_folder = '../' + 'results/cifar10/badnet/20241005164757_resnet'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -225,11 +225,24 @@ def main(args):
     # net = getattr(models, args.arch)(num_classes=10, norm_layer=None)
     # load_state_dict(net, orig_state_dict=state_dict)
     # net = net.to(device)
+    # if config.model == "resnet18":
+    #     net = PreActResNet18()
+    #     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+    #     net.load_state_dict(ld['model'])
+    #     net.to(device=device)
     if config.model == "resnet18":
-        net = PreActResNet18()
-        ld = torch.load(f'{target_folder}/results.pth', map_location=device)
-        net.load_state_dict(ld['model'])
-        net.to(device=device)
+        net = PreActResNet18(num_classes=10).to(f'cuda:{config.device}')
+    elif config.model == "rnp":
+        from models.resnet_cifar import resnet18
+        net = resnet18(num_classes=10).to(f'cuda:{config.device}')
+    elif config.model == "repvgg":
+        from repvgg_pytorch.repvgg import RepVGG
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=10, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
+    else:
+        raise NotImplementedError(config.model)
+    ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+    net.load_state_dict(ld['model'])
+    net.to(device=device)
 
     criterion = torch.nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.SGD(net.parameters(), lr=args.unlearning_lr, momentum=0.9, weight_decay=5e-4)
@@ -276,8 +289,18 @@ def main(args):
     checkpoint = torch.load(unlearned_model_path, map_location=device)
     print('Unlearned Model:', checkpoint['epoch'], checkpoint['clean_acc'], checkpoint['bad_acc'])
     args.arch = config.model
+    # if config.model == "resnet18":
+    #     unlearned_model = PreActResNet18(norm_layer=MaskBatchNorm2d)
     if config.model == "resnet18":
-        unlearned_model = PreActResNet18(norm_layer=MaskBatchNorm2d)
+        unlearned_model = PreActResNet18(num_classes=10, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
+    elif config.model == "rnp":
+        from models.resnet_cifar import resnet18
+        unlearned_model = resnet18(num_classes=10, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
+    # elif config.model == "repvgg":
+    #     from repvgg_pytorch.repvgg import RepVGG
+    #     unlearned_model = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=10, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
+    else:
+        raise NotImplementedError(config.model)
     # unlearned_model = getattr(models, args.arch)(num_classes=10, norm_layer=models.MaskBatchNorm2d)
     load_state_dict(unlearned_model, orig_state_dict=checkpoint['state_dict'])
     unlearned_model = unlearned_model.to(device)
@@ -310,11 +333,18 @@ def main(args):
     # load_state_dict(net, orig_state_dict=state_dict)
     # net = net.to(device)
     if config.model == "resnet18":
-        net = PreActResNet18()
-        ld = torch.load(f'{target_folder}/results.pth', map_location=device)
-        net.load_state_dict(ld['model'])
-        net.to(device=device)
-
+        net = PreActResNet18(num_classes=10).to(f'cuda:{config.device}')
+    elif config.model == "rnp":
+        from models.resnet_cifar import resnet18
+        net = resnet18(num_classes=10).to(f'cuda:{config.device}')
+    elif config.model == "repvgg":
+        from repvgg_pytorch.repvgg import RepVGG
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=10, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
+    else:
+        raise NotImplementedError(config.model)
+    ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+    net.load_state_dict(ld['model'])
+    net.to(device=device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 
     # Step 3: pruning

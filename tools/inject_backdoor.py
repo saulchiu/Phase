@@ -10,9 +10,10 @@ import numpy as np
 
 sys.path.append('../')
 from tools.img import rgb2yuv, yuv2rgb, tensor2ndarray, ndarray2tensor, dct_2d_3c_slide_window, idct_2d_3c_slide_window, \
-    idct_2d_3c_slide_window, dct_2d_3c_slide_window, dwt_2d_3c, idwt_2d_3c, fft_2d_3c, ifft_2d_3c
+    idct_2d_3c_slide_window, dct_2d_3c_slide_window, fft_2d_3c, ifft_2d_3c
 from tools.ctrl_transform import ctrl
 from tools.img import rgb_to_yuv, yuv_to_rgb
+
 
 import torch
 import torchvision
@@ -67,7 +68,10 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         channel_list = [1, 2]
         window_size = 32
         pos_list = [(15, 15), (31, 31)]
-        magnitude = 30
+        if config.dataset_name in ["cifar10", "gtsrb"]:
+            magnitude = 30
+        else:
+            magnitude = 50
         x_0 = tensor2ndarray(x_0)
         x_0 = rgb2yuv(x_0)
         x_dct = dct_2d_3c_slide_window(x_0, window_size)
@@ -217,12 +221,12 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         tg: torch.tensor = torch.load(f'{config.path}/trigger.pth')["tg_after"]
         tg_size = config.attack.wind
         tg_pos = 0 if config.attack.rand_pos == 0 else random.randint(0, x_torch.shape[1] - tg_size)
-        x_fft = torch.fft.fft2(x_yuv[config.attack.target_channel])
-        x_imag = torch.imag(x_fft)
-        x_imag[tg_pos:(tg_pos + tg_size), tg_pos:(tg_pos + tg_size)] = tg
-        x_fft = torch.real(x_fft) + 1j * x_imag
-        x_yuv[config.attack.target_channel] = torch.real(torch.fft.ifft2(x_fft))
-
+        for ch in config.attack.target_channel:
+            x_fft = torch.fft.fft2(x_yuv[ch])
+            x_imag = torch.imag(x_fft)
+            x_imag[tg_pos:(tg_pos + tg_size), tg_pos:(tg_pos + tg_size)] = tg
+            x_fft = torch.real(x_fft) + 1j * x_imag
+            x_yuv[ch] = torch.real(torch.fft.ifft2(x_fft))
         x_rgb = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
         x_rgb = torch.clip(x_rgb, 0, 255)
         x_rgb /= 255.
