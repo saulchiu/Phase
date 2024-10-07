@@ -241,7 +241,8 @@ class INBALightningModule(L.LightningModule):
                 y[i] = self.target_label
 
         # if poison rate is 0, never into this loop
-        if len(x_p_list) > 0 and self.extra_epochs > 0:
+        # if len(x_p_list) > 0 and self.extra_epochs > 0:
+        if len(x_p_list) > 1 and self.extra_epochs > 0:  # x_p.shape[0] should > 1
             x_p_list = torch.stack(x_p_list, dim=0)
             x_list = torch.stack(x_list, dim=0)
             ssim_tensor = ssim_function(x_p_list, x_list)
