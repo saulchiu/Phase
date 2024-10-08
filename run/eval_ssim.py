@@ -15,7 +15,7 @@ from tools.img import tensor2ndarray
 import tqdm
 
 # this script is indepedent on model, except INBA
-target_folder = '../' + 'results/gtsrb/ftrojan/20241007151724_resnet'
+target_folder = '../' + 'results/cifar10/inba/20241007212151_wind1_resnet'
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
 manual_seed(config.seed)
