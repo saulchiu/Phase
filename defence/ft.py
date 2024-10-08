@@ -70,7 +70,7 @@ class LabelSmoothingLoss(nn.Module):
 
 def add_args(parser):
     parser.add_argument('--device', type = str)
-    parser.add_argument('--ft_mode', type = str, default='all')
+    parser.add_argument('--ft_mode', type = str, default='fst')
     
     parser.add_argument('--attack', type = str, )
     parser.add_argument('--attack_label_trans', type=str, default='all2one',
@@ -106,7 +106,7 @@ def add_args(parser):
     return parser
 
 def main():
-    target_folder = '../' + 'results/cifar10/badnet/20241006002653_resnet18'
+    target_folder = '../' + 'results/cifar10/inba/20241006033657_wind8'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -139,11 +139,17 @@ def main():
     args.dataset_path = f"{args.dataset_path}/{args.dataset}"
     
     manual_seed(42)
+    args.ft_mode = 'fst'
+    args.lr = config.lr
+    # args.epochs = 2
+    args.save = True
+    args.log = True
+
     
     
     if args.lb_smooth is not None:
         lbs_criterion = LabelSmoothingLoss(classes=num_class, smoothing=args.lb_smooth)
-    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+    device = f'cuda:{config.device}' if device != 'cpu' else device
     if args.ft_mode == 'fe-tuning':
         init = True
         log_name = 'FE-tuning'
@@ -167,6 +173,7 @@ def main():
         
     args.folder_path = target_folder
     args.save_path = f'{target_folder}/ft'
+    os.makedirs(args.save_path, exist_ok=True)
 
 
     logFormatter = logging.Formatter(
@@ -176,7 +183,7 @@ def main():
     logger = logging.getLogger()
 
     if args.log:
-        fileHandler = logging.FileHandler(args.save_path + '.log')
+        fileHandler = logging.FileHandler(f'{args.save_path}/ft.log')
         fileHandler.setFormatter(logFormatter)
         logger.addHandler(fileHandler)
 
@@ -321,7 +328,7 @@ def main():
         logging.info(f'Learning rate: {optimizer.param_groups[0]["lr"]}')
         logging.info('-------------------------------------')
         
-        if epoch == args.epochs-1:
+        if epoch <= args.epochs-1:
             for dl_name, test_dataloader in test_dataloader_dict.items():
                 metrics = test(net, test_dataloader, device)
                 metric_info = {
@@ -338,7 +345,6 @@ def main():
     
     if args.save:
         model_save_path = f'{target_folder}/ft/'
-        os.makedirs(model_save_path, exist_ok=True)
         torch.save(net.state_dict(), f'{model_save_path}/checkpoint.pt')
         
     
