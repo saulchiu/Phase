@@ -76,10 +76,10 @@ def add_args(parser):
     parser.add_argument('--attack_label_trans', type=str, default='all2one',
                         help='which type of label modification in backdoor attack'
                         )
-    parser.add_argument('--pratio', type=float,
+    parser.add_argument('--pratio', type=float, default=0.1,
                         help='the poison rate '
                         )
-    parser.add_argument('--epochs', type=int)
+    parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--dataset', type=str,
                         help='which dataset to use'
                         )
@@ -87,26 +87,26 @@ def add_args(parser):
     parser.add_argument('--attack_target', type=int,default=0,
                         help='target class in all2one attack')
     parser.add_argument('--batch_size', type=int,default=128)
-    parser.add_argument('--lr', type=float)
+    parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--random_seed', default=0,type=int,
                         help='random_seed')
     parser.add_argument('--model', type=str,
                         help='choose which kind of model')
     
-    parser.add_argument('--split_ratio', type=float,
+    parser.add_argument('--split_ratio', type=float, default='0.02',
                         help='part of the training set for defense')
     
-    parser.add_argument('--log', action='store_true',
+    parser.add_argument('--log', action='store_true', default=True,
                         help='record the log')
     parser.add_argument('--pre', action='store_true', help='load pre-trained weights')
     parser.add_argument('--save', action='store_true', help='save the model checkpoint')
     parser.add_argument('--linear_name', type=str, default='linear', help='name for the linear classifier')
     parser.add_argument('--lb_smooth', type=float, default=None, help='label smoothing')
-    parser.add_argument('--alpha', type=float, default=0.2, help='fst')
+    parser.add_argument('--alpha', type=float, default=0.1, help='fst')
     return parser
 
 def main():
-    target_folder = '../' + 'results/cifar10/inba/20241006033657_wind8'
+    target_folder = '../' + 'results/gtsrb/inba/20241007012536_wind24'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -115,10 +115,13 @@ def main():
     if config.model == "resnet18":
         from models.preact_resnet import PreActResNet18
         net = PreActResNet18(num_class)
-        ld = torch.load(f'{target_folder}/results.pth', map_location=device)
-        net.load_state_dict(ld['model'])
+    elif config.model == "repvgg":
+        from repvgg_pytorch.repvgg import RepVGG
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
     else:
         raise NotImplementedError
+    ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+    net.load_state_dict(ld['model'])
     train_ds, test_ds = get_train_and_test_dataset(config.dataset_name)
     train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
@@ -138,18 +141,13 @@ def main():
     args.img_size = (args.input_height, args.input_width, args.input_channel)
     args.dataset_path = f"{args.dataset_path}/{args.dataset}"
     
-    manual_seed(42)
-    args.ft_mode = 'fst'
-    args.lr = config.lr
-    # args.epochs = 2
-    args.save = True
-    args.log = True
 
     
     
     if args.lb_smooth is not None:
         lbs_criterion = LabelSmoothingLoss(classes=num_class, smoothing=args.lb_smooth)
     device = f'cuda:{config.device}' if device != 'cpu' else device
+    print(args.ft_mode)
     if args.ft_mode == 'fe-tuning':
         init = True
         log_name = 'FE-tuning'
@@ -172,7 +170,7 @@ def main():
 
         
     args.folder_path = target_folder
-    args.save_path = f'{target_folder}/ft'
+    args.save_path = f'{target_folder}/{args.ft_mode}'
     os.makedirs(args.save_path, exist_ok=True)
 
 

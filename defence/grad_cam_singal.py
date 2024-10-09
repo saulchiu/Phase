@@ -1,0 +1,120 @@
+import sys
+sys.path.append('../')
+import PIL.Image
+from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from torchvision.models import resnet50
+from tools.dataset import get_dataloader
+from tools.img import tensor2ndarray
+import matplotlib.pyplot as plt
+from tools.dataset import get_de_normalization, get_dataset_class_and_scale, get_train_and_test_dataset
+from omegaconf import OmegaConf, DictConfig
+from tools.utils import manual_seed
+from models.preact_resnet import PreActResNet18
+from tools.inject_backdoor import patch_trigger
+import torch
+import random
+import PIL
+from tools.dataset import get_benign_transform
+import numpy as np
+from tools.inject_backdoor import patch_trigger
+
+cam_class = GradCAM
+
+target_folder = '../' + 'results/imagenette/benign/20241008220116_resnet'
+path = f'{target_folder}/config.yaml'
+config = OmegaConf.load(path)
+manual_seed(config.seed)
+device = f'cuda:{config.device}' 
+num_classes, scale = get_dataset_class_and_scale(config.dataset_name)
+if config.model == "resnet18":
+    net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
+    target_layers = [net.layer4[-1].conv2]
+elif config.model == "rnp":
+    from models.resnet_cifar import resnet18
+    net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
+    target_layers = [net.layer4[-1].conv2]
+elif config.model == "repvgg":
+    from repvgg_pytorch.repvgg import RepVGG
+    net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
+    target_layers = [net.stage4[-1].rbr_dense.conv]
+    net.deploy =True
+else:
+    raise NotImplementedError(config.model)
+ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+
+target_class = 9
+
+
+
+train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
+x_c = None
+
+for batch, label in train_dl:
+    batch = batch.to(device)
+    for i in range(batch.shape[0]):
+        if label[i] == target_class:
+            x_c = batch[i]
+            break
+    if x_c is None:
+        continue
+
+net.load_state_dict(ld['model'])
+net.to(device=device)
+net.eval()
+cam = cam_class(model=net, target_layers=target_layers)
+y_c = net(x_c.unsqueeze(0))
+_, y_c = torch.max(y_c, 1)
+
+benign_heat: np.ndarray = cam(x_c.unsqueeze(0), targets=[ClassifierOutputTarget(y_c.item())])
+
+
+num_classes, scale = get_dataset_class_and_scale(config.dataset_name)
+if config.model == "resnet18":
+    net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
+    target_layers = [net.layer4[-1].conv2]
+elif config.model == "rnp":
+    from models.resnet_cifar import resnet18
+    net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
+    target_layers = [net.layer4[-1].conv2]
+elif config.model == "repvgg":
+    from repvgg_pytorch.repvgg import RepVGG
+    net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
+    target_layers = [net.stage4[-1].rbr_dense.conv]
+    net.deploy =True
+else:
+    raise NotImplementedError(config.model)
+x_p = patch_trigger(get_de_normalization(config.dataset_name)(x_c).squeeze(), config)
+x_p = x_p.to(device)
+net.load_state_dict(ld['model'])
+net.to(device=device)
+net.eval()
+cam = cam_class(model=net, target_layers=target_layers)
+y_p = net(x_p.unsqueeze(0))
+_, y_p = torch.max(y_p, 1)
+bd_heat: np.ndarray = cam(x_p.unsqueeze(0), targets=[ClassifierOutputTarget(y_p.item())])
+
+
+
+visualization_0 = show_cam_on_image(tensor2ndarray(get_de_normalization(config.dataset_name)(x_c).squeeze()) / 255.,
+                                     benign_heat[0, :], use_rgb=True)
+visualization_1 = show_cam_on_image(tensor2ndarray(x_p) / 255., bd_heat[0, :], use_rgb=True)
+
+_, axs = plt.subplots(2, 2, figsize=(15, 10))
+axs[0, 0].imshow(tensor2ndarray(get_de_normalization(config.dataset_name)(x_c).squeeze()))
+axs[0, 0].set_title(f'x_c, label: {y_c.item()}')
+axs[0, 0].axis('off')
+
+axs[0, 1].imshow(tensor2ndarray(x_p))
+axs[0, 1].set_title(f'x_p, label: {y_p.item()}')
+axs[0, 1].axis('off')
+
+axs[1, 0].imshow(visualization_0)
+axs[1, 0].set_title('benign_heat')
+axs[1, 0].axis('off')
+
+axs[1, 1].imshow(visualization_1)
+axs[1, 1].set_title('poison_heat')
+axs[1, 1].axis('off')
+plt.show()

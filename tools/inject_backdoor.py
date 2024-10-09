@@ -29,9 +29,8 @@ class BadTransform(object):
         self.config = config
 
     def __call__(self, x_c: torch.tensor):
-        from tools.dataset import get_de_normalization
-        x_p = get_de_normalization(self.config.dataset_name)(x_c).squeeze()
-        x_p = patch_trigger(x_p, self.config)
+        # Attacker should decide whether apply normalization in somethere outside this function.
+        x_p = patch_trigger(x_c, self.config)
         return x_p
 
 
@@ -47,23 +46,24 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
     c, h, w = x_0.shape
     trans = Compose([ToTensor(), Resize((h, h))])
     if attack_name == "benign":
-        return x_0
+        x_p = x_0
     elif attack_name == 'blended':
         tg = Image.open(attack_config.tg_path)
         tg = trans(tg)
-        x_0 = x_0 * (1 - attack_config.blended_coeff) + tg * attack_config.blended_coeff
-        return x_0
+        tg = tg.to(x_0.device)
+        x_p = x_0 * (1 - attack_config.blended_coeff) + tg * attack_config.blended_coeff
     elif attack_name == 'badnet':
         tg = Image.open(f'{attack_config.tg_path}/trigger_{h}_{int(h / 10)}.png')
         mask = Image.open(f'{attack_config.tg_path}/mask_{h}_{int(h / 10)}.png')
         tg = trans(tg)
         mask = trans(mask)
-        x_0 = (1 - mask) * x_0 + tg * mask
-        return x_0
+        tg = tg.to(x_0.device)
+        mask = mask.to(x_0.device)
+        x_p = (1 - mask) * x_0 + tg * mask
     elif attack_name == 'noise':
         factor = 0.05
-        x_0 = (1 - factor) * x_0 + factor * torch.randn_like(x_0, device=x_0.device)
-        return torch.clip(x_0, 0, 1)
+        x_p = (1 - factor) * x_0 + factor * torch.randn_like(x_0, device=x_0.device)
+        x_p = torch.clip(x_p, 0, 1)
     elif attack_name == 'ftrojan':
         channel_list = [1, 2]
         window_size = 32
@@ -72,9 +72,9 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             magnitude = 30
         else:
             magnitude = 50
-        x_0 = tensor2ndarray(x_0)
-        x_0 = rgb2yuv(x_0)
-        x_dct = dct_2d_3c_slide_window(x_0, window_size)
+        x_p = tensor2ndarray(x_0)
+        x_p = rgb2yuv(x_p)
+        x_dct = dct_2d_3c_slide_window(x_p, window_size)
         x_dct = np.transpose(x_dct, (2, 0, 1))
         for ch in channel_list:
             for w in range(0, x_dct.shape[1], window_size):
@@ -84,7 +84,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_dct = np.transpose(x_dct, (1, 2, 0))
         x_idct = idct_2d_3c_slide_window(x_dct, window_size)
         x_idct = yuv2rgb(x_idct)
-        return ndarray2tensor(x_idct)
+        x_p = ndarray2tensor(x_idct)
     elif attack_name == 'lf':  # low frequency
         dataset_name = 'cifar10'
         model_name = 'preactresnet18'
@@ -100,7 +100,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             raise ValueError("lowFrequency trigger shape error, should be either 2 or 3 or 4")
         x_0 = tensor2ndarray(x_0)
         np.clip(x_0.astype(float) + trigger_array, 0, 255).astype(np.uint8)
-        return ndarray2tensor(x_0)
+        x_p = ndarray2tensor(x_0)
     elif attack_name == 'wanet':
         def get_wanet_grid(image_size, grid_path: str, s: float, device='cpu'):
             grid = torch.load(grid_path)
@@ -139,7 +139,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_0 = x_0.unsqueeze(0)
         x_0 = F.grid_sample(x_0, grid_temps.repeat(1, 1, 1, 1), align_corners=True)
         x_0 = x_0.squeeze()
-        return x_0
+        x_p = x_0
     elif attack_name == 'ctrl':
         class Args:
             pass
@@ -154,9 +154,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         }
         bad_transform = ctrl(args, False)
         x_0 = bad_transform(Image.fromarray(tensor2ndarray(x_0)), 1)
-        return trans(x_0)
-    elif attack_name == 'fiba':
-        pass
+        x_p = trans(x_0)
     elif attack_name == 'duba':
         x_c = tensor2ndarray(x_0) / 255.  # scale to 0~1
         x_p_img = PIL.Image.open('../resource/DUBA/64.png')
@@ -212,7 +210,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_re[x_c >= 220] = x_c [x_c >= 220]
         x_re[x_c <= 30] = x_c[x_c <= 30]
         x_re = x_re.astype(np.float32)
-        return ndarray2tensor(x_re)
+        x_p = ndarray2tensor(x_re)
     elif attack_name == 'inba':
         x_torch = x_0.detach().clone()
         x_torch *= 255.
@@ -230,6 +228,8 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_rgb = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
         x_rgb = torch.clip(x_rgb, 0, 255)
         x_rgb /= 255.
-        return x_rgb
+        x_p = x_rgb
     else:
         raise NotImplementedError(attack_name)
+    x_p = x_p.to(x_0.device)
+    return x_p

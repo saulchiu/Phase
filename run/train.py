@@ -35,6 +35,8 @@ def train_mdoel(config: DictConfig):
         os.makedirs(target_folder)
     main_target_path = os.path.join(target_folder, 'train.py')
     shutil.copy(__file__, main_target_path)
+    train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
+    shutil.copy('../models/cnn_lightning_model.py', train_target_path)
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))

@@ -20,11 +20,10 @@ import random
 
 
 if __name__ == '__main__':
-    target_folder = '../' + 'results/gtsrb/inba/20241007012536_wind24'
+    target_folder = '../' + 'results/imagenette/ftrojan/20241009024739_resnet'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
-    # manual_seed(config.seed)
-    # manual_seed(random.randint(0, 100))
+    manual_seed(config.seed)
     device = 'cpu' 
     visible_tf = 'dct'
     total = 1024
@@ -35,14 +34,8 @@ if __name__ == '__main__':
     batch, labels = next(iter(train_dl))
     batch = batch.to(device=device)
 
-    # load model
-    if config.model == "resnet18":
-        net = PreActResNet18(num_classes=num_class)
-        ld = torch.load(f'{target_folder}/results.pth', map_location=device)
-        net.load_state_dict(ld['model'])
-        net.eval()
-    else:
-        raise NotImplementedError
+    x_c4show = None
+    x_p4show = None
     
     for i in tqdm(range(total)):
         x_space = batch[i]  # this is a tensor
@@ -50,11 +43,6 @@ if __name__ == '__main__':
         x_space_poison = patch_trigger(
             get_de_normalization(config.dataset_name)(x_space).squeeze(),
             config)  # tensor too
-        if i == total - 1:
-            y_clean = net(x_space.unsqueeze(0))
-            y_poison = net(x_space_poison.unsqueeze(0))
-            _, predicted_clean = torch.max(y_clean, -1)
-            _, predicted_poison = torch.max(y_poison, -1)
         x_space = get_de_normalization(config.dataset_name)(x_space).squeeze()
         x_space, x_space_poison = tensor2ndarray(x_space), tensor2ndarray(x_space_poison)
         
@@ -81,9 +69,13 @@ if __name__ == '__main__':
             x_space_poison = tensor2ndarray(x_space_poison)
         res_before += x_f
         res_after += x_f_poison
+        # if y.item() == 9 and x_p4show is None:
+        if y.item() == 9:
+            x_c4show = x_space
+            x_p4show = x_space_poison
     res_before /= total
     res_after /= total
     x_f = res_before
     x_f_poison = res_after
 
-    plot_space_target_space(x_space, predicted_clean.item(), x_f, x_space_poison, predicted_poison.item(), x_f_poison, is_clip=False)
+    plot_space_target_space(x_c4show, x_f, x_p4show, x_f_poison, is_clip=True)

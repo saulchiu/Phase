@@ -111,14 +111,16 @@ class PoisonDataset(Dataset):
     def __init__(self, dataset, config):
         self.dataset = dataset
         self.transform = BadTransform(config)
+        self.de_norm = get_de_normalization(config.dataset_name)
         self.config = config
 
     def __getitem__(self, index):
         x, y = self.dataset[index]
         do_poison = (random.random() < self.config.ratio) and self.config.attack.name != 'benign'
-        if self.transform is not None and do_poison:
-            x = self.transform(x)
         if do_poison:
+            if self.config.attack.name != 'inba':  # other attack need de-norm
+                x = self.de_norm(x).squeeze()
+            x = self.transform(x)
             y = self.config.target_label
         return x, y
 
@@ -154,6 +156,9 @@ def get_dataset_class_and_scale(dataset_name):
     elif dataset_name == 'rafdb':
         num_classes = 7
         scale = 64
+    elif dataset_name == 'celeba':
+        num_classes = 2
+        scale = 224  
     else:
         raise NotImplementedError(dataset_name)
     return num_classes, scale   
@@ -174,7 +179,28 @@ def get_train_and_test_dataset(dataset_name):
     elif dataset_name == 'rafdb':
         train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_benign_transform(dataset_name))
         test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, train=False))
+    elif dataset_name == "celeba":
+        def celeba_target_transform(target):
+            gender_label = target[20]
+            return gender_label 
+        train_ds = torchvision.datasets.CelebA(root='../data', split="train", download=False, transform=get_benign_transform(dataset_name), target_transform=celeba_target_transform)
+        test_ds = torchvision.datasets.CelebA(root='../data', split="test", download=False, transform=get_benign_transform(dataset_name), target_transform=celeba_target_transform)
+        # val_ds = torchvision.datasets.CelebA(root='../data', split="valid", download=False)
     else:
         raise NotImplementedError(dataset_name)
     return train_ds, test_ds
+
+
+if __name__ == '__main__':
+    dl, test_dl = get_dataloader('celeba', 16, False, 4)
+    for batch, label in dl:
+        print(label)
+        break
+    import matplotlib.pyplot as plt
+    from tools.img import tensor2ndarray
+    _, ax = plt.subplots(1, 2)
+    ax[0].imshow(tensor2ndarray(batch[0]))
+    ax[-1].imshow(tensor2ndarray(batch[-1]))
+    plt.show()
+
 

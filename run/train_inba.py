@@ -46,7 +46,6 @@ def train_mdoel(config: DictConfig):
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
-    
     train_dl, test_dl = get_dataloader(
         config.dataset_name,
         config.batch,

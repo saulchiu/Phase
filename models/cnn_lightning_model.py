@@ -217,7 +217,7 @@ class INBALightningModule(L.LightningModule):
         for i in range(x.shape[0]):
             if random.random() < self.poison_rate:
                 # craft poison data
-                x[i] = get_de_normalization(self.dataset_name)(x[i]).squeeze()
+                # x[i] = get_de_normalization(self.dataset_name)(x[i]).squeeze()
                 x_p = x[i] * 255.
                 tg_size = self.config.attack.wind
                 tg_pos = 0 if self.config.attack.rand_pos == 0 else random.randint(0, x[i].shape[1] - self.config.attack.wind)

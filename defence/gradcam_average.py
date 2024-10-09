@@ -1,7 +1,7 @@
 import sys
 sys.path.append('../')
 import PIL.Image
-from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
+from pytorch_grad_cam import GradCAM, HiResCAM, GradCAMPlusPlus, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from torchvision.models import resnet50
@@ -19,12 +19,12 @@ import PIL
 from tools.dataset import get_benign_transform
 import numpy as np
 
-cam_class = XGradCAM
+cam_class = HiResCAM
 
-target_folder = '../' + 'results/cifar10/duba/20241006034232_resnet18'
+target_folder = '../' + 'results/imagenette/badnet/20241008013618_resnet'
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
-manual_seed(config.seed)
+# manual_seed(config.seed)
 device = f'cuda:{config.device}' 
 num_classes, scale = get_dataset_class_and_scale(config.dataset_name)
 if config.model == "resnet18":

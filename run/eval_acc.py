@@ -7,7 +7,7 @@ from models.preact_resnet import PreActResNet18
 from tools.dataset import get_dataloader, get_dataset_class_and_scale
 import torch.nn.functional as F
 
-target_folder = '../' + 'results/gtsrb/inba/20241007012536_wind24'
+target_folder = '../' + 'results/cifar10/inba/20241009095840_wind8'
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
 manual_seed(config.seed)
@@ -15,10 +15,17 @@ device = f'cuda:{config.device}'
 num_class, _ = get_dataset_class_and_scale(config.dataset_name)
 if config.model == "resnet18":
     net = PreActResNet18(num_class)
-    ld = torch.load(f'{target_folder}/results.pth', map_location=device)
-    net.load_state_dict(ld['model'])
+elif config.model == "rnp":
+    from models.resnet_cifar import resnet18
+    net = resnet18(num_classes=num_class).to(f'cuda:{config.device}')
+elif config.model == "repvgg":
+    from repvgg_pytorch.repvgg import RepVGG
+    net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
+    net.deploy = True
 else:
-    raise NotImplementedError
+    raise NotImplementedError(config.model)
+ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+net.load_state_dict(ld['model'])
 train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
 net.to(device)
 
@@ -47,6 +54,8 @@ correct = 0
 total = 0
 with torch.no_grad():
     for inputs, targets in bd_test_dl:
+        # from tools.dataset import get_de_normalization
+        # inputs = get_de_normalization(config.dataset_name)(inputs)
         inputs, targets = inputs.to(device), targets.to(device)
         outputs = net(inputs)
         _, predicted = torch.max(outputs, 1)
