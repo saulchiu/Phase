@@ -83,7 +83,7 @@ def add_args(parser):
     parser.add_argument('--dataset', type=str,
                         help='which dataset to use'
                         )
-    parser.add_argument('--dataset_path', type=str,default='../data')
+    parser.add_argument('--path', type=str)
     parser.add_argument('--attack_target', type=int,default=0,
                         help='target class in all2one attack')
     parser.add_argument('--batch_size', type=int,default=128)
@@ -106,7 +106,10 @@ def add_args(parser):
     return parser
 
 def main():
-    target_folder = '../' + 'results/gtsrb/inba/20241007012536_wind24'
+    parser = (add_args(argparse.ArgumentParser(description=sys.argv[0])))
+    args = parser.parse_args()
+
+    target_folder = args.path
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -134,12 +137,11 @@ def main():
 
     ### 1. config args, save_path, fix random seed
     
-    parser = (add_args(argparse.ArgumentParser(description=sys.argv[0])))
-    args = parser.parse_args()
+
     args.num_classes = num_class
     args.input_height, args.input_width, args.input_channel = scale, scale, 3
     args.img_size = (args.input_height, args.input_width, args.input_channel)
-    args.dataset_path = f"{args.dataset_path}/{args.dataset}"
+    # args.dataset_path = f"{args.dataset_path}/{args.dataset}"
     
 
     

@@ -28,17 +28,6 @@ from torchvision.models.convnext import ConvNeXt, CNBlockConfig
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
     manual_seed(config.seed)
-    # save config, and source file
-    target_folder = config.path if config.path != "None" else f'../results/{config.dataset_name}/{config.attack.name}/{now()}'
-    config.path = target_folder
-    if not os.path.exists(target_folder):
-        os.makedirs(target_folder)
-    main_target_path = os.path.join(target_folder, 'train.py')
-    shutil.copy(__file__, main_target_path)
-    train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
-    shutil.copy('../models/cnn_lightning_model.py', train_target_path)
-    with open(f'{target_folder}/config.yaml', 'w') as f:
-        yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
 
     _, test_dl = get_dataloader(
@@ -86,6 +75,18 @@ def train_mdoel(config: DictConfig):
     }
     torch.save(res, f"{target_folder}/results.pth")
     visualize_metrics(model.metrics_list, target_folder)
+    # save config, and source file
+    target_folder = config.path if config.path != "None" else f'../results/{config.dataset_name}/{config.attack.name}/{now()}'
+    config.path = target_folder
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
+    main_target_path = os.path.join(target_folder, 'train.py')
+    shutil.copy(__file__, main_target_path)
+    train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
+    shutil.copy('../models/cnn_lightning_model.py', train_target_path)
+    with open(f'{target_folder}/config.yaml', 'w') as f:
+        yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
+    print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
 
 
 

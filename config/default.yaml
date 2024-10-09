@@ -10,7 +10,7 @@ prefetch: False
 amp: False
 non_blocking: True
 pin_memory: True
-path: None
+path: None  # None is a str "None"
 device: 0
 batch: 64
 model: resnet18
