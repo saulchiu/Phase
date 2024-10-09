@@ -35,7 +35,11 @@ def train_mdoel(config: DictConfig):
     assert config.attack.name == "inba"
     manual_seed(config.seed)
     target_folder = f'../results/{config.dataset_name}/{config.attack.name}/{now()}' if config.path == 'None' else config.path
+    if not os.path.exists(target_folder):
+        os.makedirs(target_folder)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
+    print(target_folder)
+
     train_dl, test_dl = get_dataloader(
         config.dataset_name,
         config.batch,
@@ -90,8 +94,6 @@ def train_mdoel(config: DictConfig):
     visualize_metrics(model.metrics_list, target_folder)
     # save config, and source file
     config.path = target_folder
-    if not os.path.exists(target_folder):
-        os.makedirs(target_folder)
     train_target_path = os.path.join(target_folder, 'train.py')
     shutil.copy(__file__, train_target_path)
     train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
