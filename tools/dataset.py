@@ -121,7 +121,7 @@ class PoisonDataset(Dataset):
             if self.config.attack.name != 'inba':  # other attack need de-norm
                 x = self.de_norm(x).squeeze()
             x = self.transform(x)
-            y = self.config.target_label
+            y = y - y + self.config.target_label
         return x, y
 
     def __len__(self):
