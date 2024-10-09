@@ -7,7 +7,7 @@ from models.preact_resnet import PreActResNet18
 from tools.dataset import get_dataloader, get_dataset_class_and_scale
 import torch.nn.functional as F
 
-target_folder = '../' + 'results/cifar10/inba/20241009095840_wind8'
+target_folder = '../' + 'results/cifar10/inba/20241009113604_wind4'
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
 manual_seed(config.seed)
@@ -54,9 +54,9 @@ correct = 0
 total = 0
 with torch.no_grad():
     for inputs, targets in bd_test_dl:
-        # from tools.dataset import get_de_normalization
+        from tools.dataset import get_de_normalization
         # inputs = get_de_normalization(config.dataset_name)(inputs)
-        inputs, targets = inputs.to(device), targets.to(device)
+        # inputs, targets = inputs.to(device), targets.to(device)
         outputs = net(inputs)
         _, predicted = torch.max(outputs, 1)
         total += targets.size(0)
