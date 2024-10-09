@@ -158,7 +158,7 @@ def get_dataset_class_and_scale(dataset_name):
         scale = 64
     elif dataset_name == 'celeba':
         num_classes = 2
-        scale = 224  
+        scale = 128
     else:
         raise NotImplementedError(dataset_name)
     return num_classes, scale   
