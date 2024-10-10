@@ -20,9 +20,9 @@ from tools.dataset import get_benign_transform
 import numpy as np
 from tools.inject_backdoor import patch_trigger
 
-cam_class = GradCAM
+cam_class = GradCAMPlusPlus
 
-target_folder = '../' + 'results/imagenette/benign/20241008220116_resnet'
+target_folder = '../' + 'results/celeba/badnet/20241009234154_resnet18'
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
 manual_seed(config.seed)
@@ -44,7 +44,7 @@ else:
     raise NotImplementedError(config.model)
 ld = torch.load(f'{target_folder}/results.pth', map_location=device)
 
-target_class = 9
+target_class = 1
 
 
 
@@ -53,8 +53,9 @@ x_c = None
 
 for batch, label in train_dl:
     batch = batch.to(device)
+    
     for i in range(batch.shape[0]):
-        if label[i] == target_class:
+        if label[i].item() == target_class:
             x_c = batch[i]
             break
     if x_c is None:

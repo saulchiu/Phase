@@ -171,7 +171,7 @@ class INBALightningModule(L.LightningModule):
         print('-----train trigger first-----')
         tg_spatial = torch.randn((self.config.attack.wind, self.config.attack.wind), device=self.device)
         tg_fft = torch.fft.fft2(tg_spatial)
-        tg_fft_imag = torch.imag(tg_fft) + 512
+        tg_fft_imag = torch.imag(tg_fft)
         tg_fft_imag.requires_grad_(True)
         return tg_fft_imag
 

@@ -222,7 +222,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         for ch in config.attack.target_channel:
             x_fft = torch.fft.fft2(x_yuv[ch])
             x_imag = torch.imag(x_fft)
-            x_imag[tg_pos:(tg_pos + tg_size), tg_pos:(tg_pos + tg_size)] = 0
+            x_imag[tg_pos:(tg_pos + tg_size), tg_pos:(tg_pos + tg_size)] = tg
             x_fft = torch.real(x_fft) + 1j * x_imag
             x_yuv[ch] = torch.real(torch.fft.ifft2(x_fft))
         x_rgb = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)

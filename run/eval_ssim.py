@@ -13,9 +13,10 @@ from tools.inject_backdoor import patch_trigger
 from tools.dataset import get_de_normalization
 from tools.img import tensor2ndarray
 import tqdm
+import matplotlib.pyplot as plt
 
 # this script is indepedent on model, except INBA
-target_folder = '../' + 'results/imagenette/badnet/20241008013618_resnet'
+target_folder = '../' + 'results/celeba/ftrojan/20241010051333_resnet'
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
 manual_seed(config.seed)
@@ -68,4 +69,9 @@ lpips_metric /= total
 
 print(f'total image: {total * config.batch}\n SSIM: {ssim_metric:.8f}\n PSNR: {psnr_metric: .8f}\n LPIPS: {lpips_metric: .8f}')
 
-
+_, ax = plt.subplots(1, 2)
+ax[0].imshow(tensor2ndarray(x_c))
+ax[0].set_title('x_c')
+ax[1].imshow(tensor2ndarray(x_p))
+ax[1].set_title('x_p')
+plt.show()

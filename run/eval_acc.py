@@ -4,11 +4,12 @@ from tools.utils import manual_seed
 from omegaconf import OmegaConf
 import torch
 from models.preact_resnet import PreActResNet18
-from tools.dataset import get_dataloader, get_dataset_class_and_scale
+from tools.dataset import get_dataloader, get_dataset_class_and_scale, get_de_normalization
 import torch.nn.functional as F
+from tools.inject_backdoor import patch_trigger
 
 def eval_acc_asr():
-    target_folder = '../' + 'results/celeba/ftrojan/20241009165939_repvgg'
+    target_folder = '../' + 'results/celeba/inba/20241010173341'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -46,20 +47,20 @@ def eval_acc_asr():
     if config.attack.name == "benign":
         return
     
-    from tools.dataset import PoisonDataset, get_train_and_test_dataset
-    from torch.utils.data.dataloader import DataLoader
-
-    _, test_ds = get_train_and_test_dataset(config.dataset_name)
-    config.ratio = 1
-    bd_test_ds = PoisonDataset(test_ds, config)
-    bd_test_dl = DataLoader(bd_test_ds, config.batch, False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
-
     correct = 0
     total = 0
     with torch.no_grad():
-        for inputs, targets in bd_test_dl:
+        for inputs, targets in test_dl:
             inputs, targets = inputs.to(device), targets.to(device)
-            outputs = net(inputs)
+            if config.attack.name != "inba":
+                inputs = get_de_normalization(config.dataset_name)(inputs)
+            bd_inpus = []
+            for i in range(inputs.shape[0]):
+                bd_inpus.append(patch_trigger(inputs[i], config))
+            bd_inpus = torch.stack(bd_inpus, dim=0)
+            targets = targets - targets + config.target_label
+            # print(targets)
+            outputs = net(bd_inpus)
             _, predicted = torch.max(outputs, 1)
             total += targets.size(0)
             correct += (predicted == targets).sum().item()

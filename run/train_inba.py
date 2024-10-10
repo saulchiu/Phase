@@ -34,11 +34,18 @@ from tools.dataset import PoisonDataset, get_train_and_test_dataset
 def train_mdoel(config: DictConfig):
     assert config.attack.name == "inba"
     manual_seed(config.seed)
+    # save config, and source file
     target_folder = f'../results/{config.dataset_name}/{config.attack.name}/{now()}' if config.path == 'None' else config.path
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
+    config.path = target_folder
+    train_target_path = os.path.join(target_folder, 'train.py')
+    shutil.copy(__file__, train_target_path)
+    train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
+    shutil.copy('../models/cnn_lightning_model.py', train_target_path)
+    with open(f'{target_folder}/config.yaml', 'w') as f:
+        yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
-    print(target_folder)
 
     train_dl, test_dl = get_dataloader(
         config.dataset_name,
@@ -75,13 +82,13 @@ def train_mdoel(config: DictConfig):
     model.eval()
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
-    print('----------poison----------')
-    config_test = config.copy()
-    config_test.ratio = 1
-    _, test_ds = get_train_and_test_dataset(config.dataset_name)
-    poison_test_ds = PoisonDataset(test_ds, config_test)
-    poison_test_dl = DataLoader(poison_test_ds, batch_size=config.batch, shuffle=False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
-    trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
+    # print('----------poison----------')
+    # config_test = config.copy()
+    # config_test.ratio = 1
+    # _, test_ds = get_train_and_test_dataset(config.dataset_name)
+    # poison_test_ds = PoisonDataset(test_ds, config_test)
+    # poison_test_dl = DataLoader(poison_test_ds, batch_size=config.batch, shuffle=False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
+    # trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
     res = {
     "model": model.model.state_dict(),
     "param_opt": model.param_opt.state_dict(),
@@ -92,15 +99,7 @@ def train_mdoel(config: DictConfig):
     }
     torch.save(res, f"{target_folder}/results.pth")
     visualize_metrics(model.metrics_list, target_folder)
-    # save config, and source file
-    config.path = target_folder
-    train_target_path = os.path.join(target_folder, 'train.py')
-    shutil.copy(__file__, train_target_path)
-    train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
-    shutil.copy('../models/cnn_lightning_model.py', train_target_path)
-    with open(f'{target_folder}/config.yaml', 'w') as f:
-        yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
-    print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
+
 
 
 if __name__ == '__main__':
