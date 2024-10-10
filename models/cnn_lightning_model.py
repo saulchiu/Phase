@@ -154,7 +154,7 @@ class INBALightningModule(L.LightningModule):
         self.extra_epochs = self.config.attack.tg_epoch
         self.reset_epoch_flag = False
         self.metrics_list = []
-        self.model_state_dict_backup = model.state_dict()
+        self.model_state_dict_backup = model.state_dict().copy()
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.amp)
         self.tg_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, [self.trigger]),
                                     lr=self.config.lr, 
@@ -164,7 +164,7 @@ class INBALightningModule(L.LightningModule):
                                     lr=self.config.lr, 
                                     momentum=self.config.momentum, 
                                     weight_decay=self.config.weight_decay)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.attack.tg_epoch)
         self.criterion = torch.nn.CrossEntropyLoss()
     
     def init_trigger(self):
@@ -179,8 +179,10 @@ class INBALightningModule(L.LightningModule):
         return self.model(x)
     
     def on_train_epoch_end(self):
+        self.scheduler.step()
         if self.extra_epochs > 0:
             self.extra_epochs -= 1
+            return
         elif self.extra_epochs == 0:
             print('-----start train model-----')
             self.model.load_state_dict(self.model_state_dict_backup)
@@ -188,7 +190,6 @@ class INBALightningModule(L.LightningModule):
             self.param_opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
             self.extra_epochs = -1
-        self.scheduler.step()
         metrics = {
             "epoch": self.current_epoch,
             "train_loss_epoch": self.trainer.logged_metrics.get('train_loss', None),
