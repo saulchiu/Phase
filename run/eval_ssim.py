@@ -16,7 +16,7 @@ import tqdm
 import matplotlib.pyplot as plt
 
 # this script is indepedent on model, except INBA
-target_folder = '../' + 'results/celeba/ftrojan/20241010051333_resnet'
+target_folder = '../' + 'results/gtsrb/inba/20241006234607_wind16'
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
 manual_seed(config.seed)
@@ -53,6 +53,7 @@ for batch, _ in test_dl:
     for i in range(batch.shape[0]):
         x_c = batch[i]
         x_p = patch_trigger(x_c.squeeze(), config)
+        x_p = torch.clip(x_p, 0, 1)
         poison_batch.append(x_p)
     poison_batch = torch.stack(poison_batch, dim=0)
     batch = batch.to(f'cuda:{config.device}')

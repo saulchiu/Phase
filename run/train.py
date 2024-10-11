@@ -53,6 +53,33 @@ def train_mdoel(config: DictConfig):
         net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
     elif config.model == "repvgg":
         net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
+    elif config.model == "convnext":
+        if config.dataset_name == 'cifar10':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.1
+        elif config.dataset_name == 'imagenette':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.2
+        elif config.dataset_name == 'gtsrb':
+            channel_list = [96, 192, 384, 768]
+            stochastic_depth_prob = 0.3
+        elif config.dataset_name == 'fer2013':
+            channel_list = [64, 128, 256, 512]
+            stochastic_depth_prob = 0.1
+        else:
+            raise NotImplementedError(config.dataset_name)
+        block_setting = [
+            CNBlockConfig(input_channels=channel_list[0], out_channels=channel_list[1], num_layers=3),
+            CNBlockConfig(input_channels=channel_list[1], out_channels=channel_list[2], num_layers=3),
+            CNBlockConfig(input_channels=channel_list[2], out_channels=channel_list[3], num_layers=9),
+            CNBlockConfig(input_channels=channel_list[3], out_channels=None, num_layers=3)
+        ]
+        net = ConvNeXt(
+            block_setting=block_setting,
+            stochastic_depth_prob=stochastic_depth_prob,  # Lower stochastic depth for a small dataset
+            layer_scale=1e-6,
+            num_classes=config.num_classes
+        ).to(f'cuda:{config.device}')
     else:
         raise NotImplementedError(config.model)
 
