@@ -101,6 +101,11 @@ def train_mdoel(config: DictConfig):
     }
     torch.save(res, f"{target_folder}/results.pth")
     visualize_metrics(model.metrics_list, target_folder)
+    from run.eval_acc import cal_acc_asr
+    from run.eval_ssim import cal_ssim_psnr
+    cal_acc_asr(target_folder.split('../')[-1])
+    cal_ssim_psnr(target_folder.split('../')[-1])
+    
 
 
 

@@ -8,8 +8,8 @@ from tools.dataset import get_dataloader, get_dataset_class_and_scale, get_de_no
 import torch.nn.functional as F
 from tools.inject_backdoor import patch_trigger
 
-def eval_acc_asr():
-    target_folder = '../' + 'results/cifar10/inba/20241012093631'
+def cal_acc_asr(target_folder):
+    target_folder = '../' + target_folder
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -30,7 +30,7 @@ def eval_acc_asr():
     net.load_state_dict(ld['model'])
     train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
     net.to(device)
-    print(torch.load(f'{target_folder}/trigger.pth'))
+    # print(torch.load(f'{target_folder}/trigger.pth'))
 
     correct = 0
     total = 0
@@ -69,7 +69,13 @@ def eval_acc_asr():
     print(f'{config.attack.name} ASR: {accuracy:.4f}%')
 
 
-eval_acc_asr()
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description='Process some paths.')
+    parser.add_argument('--path', type=str, help='The path to the target folder.')
+    args = parser.parse_args()
+    target_folder = args.path
+    cal_acc_asr(target_folder)
 
 
 
