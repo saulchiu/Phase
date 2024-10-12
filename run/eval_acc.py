@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from tools.inject_backdoor import patch_trigger
 
 def eval_acc_asr():
-    target_folder = '../' + 'results/cifar10/inba/20241011192632'
+    target_folder = '../' + 'results/cifar10/inba/20241012093631'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)

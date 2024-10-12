@@ -16,7 +16,7 @@ import tqdm
 import matplotlib.pyplot as plt
 
 # this script is indepedent on model, except INBA
-target_folder = '../' + 'results/gtsrb/inba/20241006234607_wind16'
+target_folder = '../' + 'results/cifar10/inba/20241012093631'
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
 manual_seed(config.seed)
