@@ -137,13 +137,14 @@ class INBALightningModule(L.LightningModule):
         super().__init__()
         self.config = config
         self.model = model
-        # self.ema = EMA(self.model, update_every=self.config.ema_update_every)
-        # self.ema.to(device=self.device)
         self.lr = config.lr
         self.momentum = config.momentum
         self.weight_decay = config.weight_decay
         self.poison_rate = config.ratio
-        self.trigger = torch.nn.Parameter(self.init_trigger())
+        # self.trigger = torch.nn.Parameter(self.init_trigger())
+        self.mask = torch.nn.Parameter(
+            torch.ones(size=(32, 32), device=self.device)
+        )
         self.target_label = config.target_label
         self.dataset_name = config.dataset_name
         self.automatic_optimization = False
@@ -156,7 +157,7 @@ class INBALightningModule(L.LightningModule):
         self.metrics_list = []
         self.model_state_dict_backup = model.state_dict().copy()
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.amp)
-        self.tg_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, [self.trigger]),
+        self.tg_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, [self.mask]),
                                     lr=self.config.lr, 
                                     momentum=self.config.momentum, 
                                     weight_decay=self.config.weight_decay)
@@ -166,12 +167,18 @@ class INBALightningModule(L.LightningModule):
                                     weight_decay=self.config.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.attack.tg_epoch)
         self.criterion = torch.nn.CrossEntropyLoss()
+
+
     
     def init_trigger(self):
         print('-----train trigger first-----')
-        tg_spatial = torch.randn((self.config.attack.wind, self.config.attack.wind), device=self.device)
+        tg_spatial = torch.randn(
+            device=self.device,
+            size=(32, 32)
+        )
         tg_fft = torch.fft.fft2(tg_spatial)
         tg_fft_imag = torch.imag(tg_fft)
+        # tg_fft_imag = torch.ones(size=(32, 32), device=self.device)
         tg_fft_imag.requires_grad_(True)
         return tg_fft_imag
 
@@ -180,16 +187,22 @@ class INBALightningModule(L.LightningModule):
     
     def on_train_epoch_end(self):
         self.scheduler.step()
-        if self.extra_epochs > 0:
+        if self.extra_epochs > 1:
             self.extra_epochs -= 1
             return
-        elif self.extra_epochs == 0:
+        elif self.extra_epochs == 1:
             print('-----start train model-----')
             self.model.load_state_dict(self.model_state_dict_backup)
-            # self.ema = EMA(self.model, update_every=10)
             self.param_opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
             self.extra_epochs = -1
+
+            modified_mask = torch.where(self.mask > self.config.attack.threshold,
+                                            torch.ones_like(self.mask),
+                                            0.1).detach()
+            modified_mask.requires_grad_(False)                  
+            self.mask = torch.nn.Parameter(modified_mask)
+            return
         metrics = {
             "epoch": self.current_epoch,
             "train_loss_epoch": self.trainer.logged_metrics.get('train_loss', None),
@@ -220,15 +233,13 @@ class INBALightningModule(L.LightningModule):
                 # craft poison data
                 # x[i] = get_de_normalization(self.dataset_name)(x[i]).squeeze()
                 x_p = x[i] * 255.
-                tg_size = self.config.attack.wind
-                tg_pos = 0 if self.config.attack.rand_pos == 0 else random.randint(0, x[i].shape[1] - self.config.attack.wind)
                 x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
                 for ch in self.config.attack.target_channel:
                     x_u = x_yuv[ch]
                     x_u_fft = torch.fft.fft2(x_u)
-                    x_u_fft_imag = torch.imag(x_u_fft)
-                    x_u_fft_imag[tg_pos:(tg_pos+tg_size), tg_pos:(tg_pos+tg_size)] = self.trigger
-                    x_u_fft = torch.real(x_u_fft) + 1j * x_u_fft_imag
+                    x_u_fft_real = torch.real(x_u_fft)
+                    x_u_fft_imag = torch.imag(x_u_fft) * self.mask.clone()
+                    x_u_fft = x_u_fft_real + 1j * x_u_fft_imag
                     x_u = torch.real(torch.fft.ifft2(x_u_fft))
                     x_yuv[ch] = x_u
                 x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
@@ -239,8 +250,6 @@ class INBALightningModule(L.LightningModule):
                 x[i] = x_p
                 y[i] = self.target_label
 
-        # if poison rate is 0, never into this loop
-        # if len(x_p_list) > 0 and self.extra_epochs > 0:
         if len(x_p_list) > 1 and self.extra_epochs > 0:  # x_p.shape[0] should > 1
             x_p_list = torch.stack(x_p_list, dim=0)
             x_list = torch.stack(x_list, dim=0)
@@ -251,6 +260,7 @@ class INBALightningModule(L.LightningModule):
             self.manual_backward(loss_poison, retain_graph=True)
             self.tg_opt.step()
             self.tg_opt.zero_grad()
+        # print(self.trigger)
         y_p = self.forward(x)
         loss = self.criterion(y_p, y.long())
         _, predicted = torch.max(y_p, -1)

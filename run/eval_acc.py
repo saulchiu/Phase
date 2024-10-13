@@ -30,7 +30,6 @@ def cal_acc_asr(target_folder):
     net.load_state_dict(ld['model'])
     train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
     net.to(device)
-    # print(torch.load(f'{target_folder}/trigger.pth'))
 
     correct = 0
     total = 0

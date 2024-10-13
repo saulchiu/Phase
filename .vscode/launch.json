@@ -11,7 +11,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/exp",
-            "args": ["attack=benign", "epoch=3", "batch=64", "val_epoch=1"]
+            "args": ["attack=inba", "model=repvgg"]
         }
     ]
 }

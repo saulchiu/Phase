@@ -1,6 +1,10 @@
 name: inba
-wind: 1
-rand_pos: 1
 target_channel: [1]
 ssim_coeff: 10
 tg_epoch: 20
+threshold: 0.8
+
+x_1: 0
+y_1: 0
+x_2: 31
+y_2: 31

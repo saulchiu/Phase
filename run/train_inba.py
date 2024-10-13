@@ -67,16 +67,13 @@ def train_mdoel(config: DictConfig):
     else:
         raise NotImplementedError(config.model)
     model = INBALightningModule(net, config)
-    # tg_before = model.trigger
-    tg_before = model.trigger.detach().clone()
     logger = CSVLogger(save_dir=target_folder, name='log')
     assert config.epoch > config.val_epoch
     assert config.epoch > config.attack.tg_epoch
     trainer = L.Trainer(max_epochs=config.epoch + config.attack.tg_epoch, devices=[config.device], logger=logger, default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=train_dl)
     torch.save({
-    "tg_before": tg_before,
-    "tg_after": model.trigger
+    "mask": model.mask,
     },
     f'{target_folder}/trigger.pth')
     if config.model == "repvgg":
@@ -84,13 +81,7 @@ def train_mdoel(config: DictConfig):
     model.eval()
     print('----------benign----------')
     trainer.test(model=model, dataloaders=test_dl)  # benign performance
-    # print('----------poison----------')
-    # config_test = config.copy()
-    # config_test.ratio = 1
-    # _, test_ds = get_train_and_test_dataset(config.dataset_name)
-    # poison_test_ds = PoisonDataset(test_ds, config_test)
-    # poison_test_dl = DataLoader(poison_test_ds, batch_size=config.batch, shuffle=False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
-    # trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
+
     res = {
     "model": model.model.state_dict(),
     "param_opt": model.param_opt.state_dict(),

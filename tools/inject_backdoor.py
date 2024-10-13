@@ -59,6 +59,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
     attack_name = attack_config.name
     c, h, w = x_0.shape
     trans = Compose([ToTensor(), Resize((h, h))])
+    device = x_0.device
     if attack_name == "benign":
         x_p = x_0
     elif attack_name == 'blended':
@@ -128,7 +129,6 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             return grid_temps
 
         image_size = x_0.shape[1]
-        device = x_0.device
         grid_path = f'../resource/wanet/grid_{image_size}.pth'
         k = 4
         s = 0.5
@@ -199,12 +199,14 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             x_c_re[:, :, i] = pywt.waverec2(coeffs=res_coe, wavelet=wave)
 
         # exchange amplitude
-        x_c_f = fft_2d_3c(x_c)
-        x_re_f = fft_2d_3c(x_c_re)
+        x_c_f = np.fft.fft2(x_c, axes=(-2, -3))
+        x_re_f = np.fft.fft2(x_c_re, axes=(-2, -3))
         clean_amplitude, clean_phase = np.abs(x_c_f), np.angle(x_c_f)
         poison_amplitude, poison_phase = np.abs(x_re_f), np.angle(x_re_f)
+        clean_amplitude = np.fft.fftshift(clean_amplitude, axes=(0, 1))
+        clean_amplitude = np.fft.ifftshift(clean_amplitude, axes=(0, 1))
         x_re_f = clean_amplitude * np.exp(1j * poison_phase)
-        x_re = ifft_2d_3c(x_re_f).real
+        x_re = np.fft.ifft2(x_re_f, axes=(-2, -3)).real
 
         # blend DCT frequency
         lamb = 0.7
@@ -230,14 +232,16 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_torch = x_0.detach().clone()
         x_torch *= 255.
         x_yuv = torch.stack(rgb_to_yuv(x_torch[0], x_torch[1], x_torch[2]), dim=0)
-        tg: torch.tensor = torch.load(f'{config.path}/trigger.pth')["tg_after"]
-        tg_size = config.attack.wind
-        tg_pos = 0 if config.attack.rand_pos == 0 else random.randint(0, x_torch.shape[1] - tg_size)
+        ld = torch.load(f'{config.path}/trigger.pth')
+        # tg = ld['trigger'].to(device)
+        m = ld['mask'].to(device)
         for ch in config.attack.target_channel:
             x_fft = torch.fft.fft2(x_yuv[ch])
+            x_real = torch.real(x_fft)
             x_imag = torch.imag(x_fft)
-            x_imag[tg_pos:(tg_pos + tg_size), tg_pos:(tg_pos + tg_size)] = tg
-            x_fft = torch.real(x_fft) + 1j * x_imag
+            x_imag = x_imag * m
+            # x_real = x_real * tg
+            x_fft = x_real + 1j * x_imag
             x_yuv[ch] = torch.real(torch.fft.ifft2(x_fft))
         x_rgb = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
         x_rgb /= 255.
