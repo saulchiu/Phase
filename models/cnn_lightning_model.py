@@ -10,6 +10,7 @@ from ema_pytorch.ema_pytorch import EMA
 from torchmetrics.image import StructuralSimilarityIndexMeasure
 import matplotlib.pyplot as plt
 import os
+from tools.dataset import get_dataset_class_and_scale
 
 def visualize_metrics(metrics_list, target_folder):
     epochs = [m['epoch'] for m in metrics_list]
@@ -142,8 +143,9 @@ class INBALightningModule(L.LightningModule):
         self.weight_decay = config.weight_decay
         self.poison_rate = config.ratio
         # self.trigger = torch.nn.Parameter(self.init_trigger())
+        _, scale = get_dataset_class_and_scale(config.dataset_name)
         self.mask = torch.nn.Parameter(
-            torch.ones(size=(32, 32), device=self.device)
+            torch.ones(size=(scale, scale), device=self.device)
         )
         self.target_label = config.target_label
         self.dataset_name = config.dataset_name
