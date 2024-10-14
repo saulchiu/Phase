@@ -11,6 +11,7 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure
 import matplotlib.pyplot as plt
 import os
 from tools.dataset import get_dataset_class_and_scale
+import math
 
 def visualize_metrics(metrics_list, target_folder):
     epochs = [m['epoch'] for m in metrics_list]
@@ -236,14 +237,25 @@ class INBALightningModule(L.LightningModule):
                 # x[i] = get_de_normalization(self.dataset_name)(x[i]).squeeze()
                 x_p = x[i] * 255.
                 x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
-                for ch in self.config.attack.target_channel:
-                    x_u = x_yuv[ch]
-                    x_u_fft = torch.fft.fft2(x_u)
-                    x_u_fft_real = torch.real(x_u_fft)
-                    x_u_fft_imag = torch.imag(x_u_fft) * self.mask.clone()
-                    x_u_fft = x_u_fft_real + 1j * x_u_fft_imag
-                    x_u = torch.real(torch.fft.ifft2(x_u_fft))
-                    x_yuv[ch] = x_u
+                
+                x_y = x_yuv[0]
+                x_y_fft = torch.fft.fft2(x_y)
+                x_y_fft_real = torch.real(x_y_fft)
+                x_y_fft_imag = torch.imag(x_y_fft) * self.mask.clone()
+                x_y_fft = x_y_fft_real + 1j * x_y_fft_imag
+                x_y = torch.real(torch.fft.ifft2(x_y_fft))
+                x_yuv[0] = x_y
+
+                x_u = x_yuv[1]
+                x_u_fft = torch.fft.fft2(x_u)
+                x_u_fft_amp = torch.abs(x_u_fft)
+                x_u_fft_pha = torch.angle(x_u_fft)
+                x_u_fft_pha[-4:-1, -4:-1] = torch.tensor(math.pi / 2)
+                x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
+                x_u = torch.fft.ifft2(x_u_fft)
+                x_u = torch.real(x_u)
+                x_yuv[1] = x_u
+                
                 x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
                 x_p /= 255.
                 if self.extra_epochs > 0:

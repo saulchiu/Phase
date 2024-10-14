@@ -22,6 +22,7 @@ from PIL import Image
 import torch.nn.functional as F
 from omegaconf import OmegaConf, DictConfig
 import random
+import math
 
 
 class BadTransform(object):
@@ -235,14 +236,25 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         ld = torch.load(f'{config.path}/trigger.pth')
         # tg = ld['trigger'].to(device)
         m = ld['mask'].to(device)
-        for ch in config.attack.target_channel:
-            x_fft = torch.fft.fft2(x_yuv[ch])
-            x_real = torch.real(x_fft)
-            x_imag = torch.imag(x_fft)
-            x_imag = x_imag * m
-            # x_real = x_real * tg
-            x_fft = x_real + 1j * x_imag
-            x_yuv[ch] = torch.real(torch.fft.ifft2(x_fft))
+
+        x_y = x_yuv[0]
+        x_y_fft = torch.fft.fft2(x_y)
+        x_y_fft_real = torch.real(x_y_fft)
+        x_y_fft_imag = torch.imag(x_y_fft) * m
+        x_y_fft = x_y_fft_real + 1j * x_y_fft_imag
+        x_y = torch.real(torch.fft.ifft2(x_y_fft))
+        x_yuv[0] = x_y
+        
+        x_u = x_yuv[1]
+        x_u_fft = torch.fft.fft2(x_u)
+        x_u_fft_amp = torch.abs(x_u_fft)
+        x_u_fft_pha = torch.angle(x_u_fft)
+        x_u_fft_pha[-4:-1, -4:-1] = torch.tensor(math.pi / 2)
+        x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
+        x_u = torch.fft.ifft2(x_u_fft)
+        x_u = torch.real(x_u)
+        x_yuv[1] = x_u
+
         x_rgb = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
         x_rgb /= 255.
         x_p = x_rgb
