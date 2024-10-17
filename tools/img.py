@@ -244,6 +244,14 @@ def plot_space_target_space(x_space: numpy.ndarray, x_target, x_process_space, x
     fig.colorbar(im2, cax=cbar_ax)
     plt.tight_layout()
     plt.show()
+    
 
+def get_shifted_amp_pha(x_spatial):
+    x_fft = np.fft.fft2(x_spatial, axes=(-3, -2))
+    amp = np.abs(x_fft)
+    pha = np.angle(x_fft)
+    amp_shift = np.fft.fftshift(amp, axes=(-3, -2))
+    pha_shift = np.fft.fftshift(pha, axes=(-3, -2))
+    return amp_shift, pha_shift
 
 

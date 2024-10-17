@@ -135,92 +135,101 @@ class BASELightningModule(L.LightningModule):
 
 
 class INBALightningModule(L.LightningModule):
-    def __init__(self, model: torch.nn.Module, config):
+    def __init__(self, model: torch.nn.Module, config, mode):
         super().__init__()
         self.config = config
+        self.mode = mode
         self.model = model
         self.lr = config.lr
         self.momentum = config.momentum
         self.weight_decay = config.weight_decay
         self.poison_rate = config.ratio
-        # self.trigger = torch.nn.Parameter(self.init_trigger())
         _, scale = get_dataset_class_and_scale(config.dataset_name)
-        self.mask = torch.nn.Parameter(
-            torch.ones(size=(scale, scale), device=self.device)
-        )
         self.target_label = config.target_label
         self.dataset_name = config.dataset_name
         self.automatic_optimization = False
         self.validation_step_outputs = []
         self.cur_val_loss = 0.
         self.cur_val_acc = 0.
-
-        self.extra_epochs = self.config.attack.tg_epoch
         self.reset_epoch_flag = False
         self.metrics_list = []
         self.model_state_dict_backup = model.state_dict().copy()
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.amp)
-        self.tg_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, [self.mask]),
-                                    lr=self.config.lr, 
-                                    momentum=self.config.momentum, 
-                                    weight_decay=self.config.weight_decay)
-        self.param_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()),
-                                    lr=self.config.lr, 
-                                    momentum=self.config.momentum, 
-                                    weight_decay=self.config.weight_decay)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.attack.tg_epoch)
+        if mode == "trigger":  # train trigger or mask
+            print('------')
+            print('train trigger')
+            print('------')
+            self.mask = torch.nn.Parameter(
+                torch.ones(size=(scale, scale), device=self.device)
+            )
+            self.tg_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, [self.mask]),
+                                        lr=self.config.lr, 
+                                        momentum=self.config.momentum, 
+                                        weight_decay=self.config.weight_decay)
+            self.param_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()),
+                                        lr=self.config.lr, 
+                                        momentum=self.config.momentum, 
+                                        weight_decay=self.config.weight_decay)
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.attack.tg_epoch)
+        elif mode == 'model':  # train model
+            print('------')
+            print('train model')
+            print('------')
+            self.mask = torch.load(f'{config.path}/trigger.pth')['mask']
+            self.param_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()),
+                                        lr=self.config.lr, 
+                                        momentum=self.config.momentum, 
+                                        weight_decay=self.config.weight_decay)
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
         self.criterion = torch.nn.CrossEntropyLoss()
-
-
-    
-    def init_trigger(self):
-        print('-----train trigger first-----')
-        tg_spatial = torch.randn(
-            device=self.device,
-            size=(32, 32)
-        )
-        tg_fft = torch.fft.fft2(tg_spatial)
-        tg_fft_imag = torch.imag(tg_fft)
-        # tg_fft_imag = torch.ones(size=(32, 32), device=self.device)
-        tg_fft_imag.requires_grad_(True)
-        return tg_fft_imag
 
     def forward(self, x):
         return self.model(x)
     
     def on_train_epoch_end(self):
         self.scheduler.step()
-        if self.extra_epochs > 1:
-            self.extra_epochs -= 1
-            return
-        elif self.extra_epochs == 1:
-            print('-----start train model-----')
-            self.model.load_state_dict(self.model_state_dict_backup)
-            self.param_opt = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.weight_decay)
-            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.param_opt, T_max=self.config.epoch)
-            self.extra_epochs = -1
+        if self.mode == "trigger":
+            if self.trainer.current_epoch == self.config.attack.tg_epoch - 1:
+                threshold = self.config.attack.threshold
+                mask_coeff = self.config.attack.mask_coeff
 
-            modified_mask = torch.where(self.mask > self.config.attack.threshold,
+                sorted_mask, _ = torch.sort(self.mask.view(-1))  # 展平mask并排序
+                quantile_index = int(threshold * sorted_mask.numel())
+                quantile_value = sorted_mask[quantile_index]
+                modified_mask = torch.where(self.mask > quantile_value,
                                             torch.ones_like(self.mask),
-                                            0.1).detach()
-            modified_mask.requires_grad_(False)                  
-            self.mask = torch.nn.Parameter(modified_mask)
-            return
-        metrics = {
-            "epoch": self.current_epoch,
-            "train_loss_epoch": self.trainer.logged_metrics.get('train_loss', None),
-            "train_acc_epoch": self.trainer.logged_metrics.get('train_acc', None)
-        }
-        if 'val_loss' in self.trainer.logged_metrics:
-            metrics["val_loss_epoch"] = self.trainer.logged_metrics['val_loss'].item()
-        else:
-            metrics["val_loss_epoch"] = None
+                                            mask_coeff).detach()
+                mask_coeff_mask = torch.eq(modified_mask, mask_coeff)
+                num_mask_coeffs = torch.sum(mask_coeff_mask)
+                total_elements = modified_mask.numel()
 
-        if 'val_acc' in self.trainer.logged_metrics:
-            metrics["val_acc_epoch"] = self.trainer.logged_metrics['val_acc'].item()
-        else:
-            metrics["val_acc_epoch"] = None
-        self.metrics_list.append(metrics)
+                print('------')
+                print(f'mask_coeff {mask_coeff} ratio: {num_mask_coeffs / total_elements:.2f}%')
+                print('------')
+
+                modified_mask.requires_grad_(False) 
+                tg = {
+                    "raw_mask": self.mask,
+                    "mask": modified_mask,
+                }                 
+                torch.save(tg, f'{self.config.path}/trigger.pth')
+            return
+        if self.mode == "model":
+            metrics = {
+                "epoch": self.current_epoch,
+                "train_loss_epoch": self.trainer.logged_metrics.get('train_loss', None),
+                "train_acc_epoch": self.trainer.logged_metrics.get('train_acc', None)
+            }
+            if 'val_loss' in self.trainer.logged_metrics:
+                metrics["val_loss_epoch"] = self.trainer.logged_metrics['val_loss'].item()
+            else:
+                metrics["val_loss_epoch"] = None
+
+            if 'val_acc' in self.trainer.logged_metrics:
+                metrics["val_acc_epoch"] = self.trainer.logged_metrics['val_acc'].item()
+            else:
+                metrics["val_acc_epoch"] = None
+            self.metrics_list.append(metrics)
 
 
     def training_step(self, batch):
@@ -234,10 +243,10 @@ class INBALightningModule(L.LightningModule):
         for i in range(x.shape[0]):
             if random.random() < self.poison_rate:
                 # craft poison data
-                # x[i] = get_de_normalization(self.dataset_name)(x[i]).squeeze()
-                x_p = x[i] * 255.
+                x_p = x[i].clone()
                 x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
                 
+                # Y channel
                 x_y = x_yuv[0]
                 x_y_fft = torch.fft.fft2(x_y)
                 x_y_fft_real = torch.real(x_y_fft)
@@ -246,25 +255,49 @@ class INBALightningModule(L.LightningModule):
                 x_y = torch.real(torch.fft.ifft2(x_y_fft))
                 x_yuv[0] = x_y
 
+                # U channel
+                scale = x.shape[-1]
+                tg_pos = int(scale / 2)
+                tg_size = self.config.attack.tg_size
                 x_u = x_yuv[1]
                 x_u_fft = torch.fft.fft2(x_u)
                 x_u_fft_amp = torch.abs(x_u_fft)
                 x_u_fft_pha = torch.angle(x_u_fft)
-                x_u_fft_pha[-4:-1, -4:-1] = torch.tensor(math.pi / 2)
+                x_u_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = torch.tensor(math.pi, device=self.device)
                 x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
                 x_u = torch.fft.ifft2(x_u_fft)
                 x_u = torch.real(x_u)
                 x_yuv[1] = x_u
+
+                # V channel
+                tg_size = int(tg_size / 2)
+                x_v = x_yuv[2]
+                x_v_fft = torch.fft.fft2(x_v)
+                x_v_fft_amp = torch.abs(x_v_fft)
+                x_v_fft_pha = torch.angle(x_v_fft)
+                x_v_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = torch.tensor(math.pi, device=self.device)
+                x_v_fft = x_v_fft_amp * torch.exp(1j * x_v_fft_pha)
+                x_v = torch.fft.ifft2(x_v_fft)
+                x_v = torch.real(x_v)
+                x_yuv[2] = x_v
                 
                 x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
-                x_p /= 255.
-                if self.extra_epochs > 0:
+
+                # mix amp
+                x_c = x[i].clone()
+                x_c_fft = torch.fft.fft2(x_c, dim=(1, 2))
+                x_p_fft = torch.fft.fft2(x_p, dim=(1, 2))
+                x_p_fft = torch.abs(x_c_fft) * torch.exp(1j * torch.angle(x_p_fft))
+                x_p = torch.fft.ifft2(x_p_fft, dim=(1, 2))
+                x_p = torch.real(x_p)
+
+                if self.mode == "trigger":
                     x_p_list.append(x_p)
                     x_list.append(x[i].clone())
                 x[i] = x_p
                 y[i] = self.target_label
 
-        if len(x_p_list) > 1 and self.extra_epochs > 0:  # x_p.shape[0] should > 1
+        if len(x_p_list) > 1:  # x_p.shape[0] should > 1
             x_p_list = torch.stack(x_p_list, dim=0)
             x_list = torch.stack(x_list, dim=0)
             ssim_tensor = ssim_function(x_p_list, x_list)

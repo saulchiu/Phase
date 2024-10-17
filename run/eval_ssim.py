@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torchmetrics.image import StructuralSimilarityIndexMeasure
 from torchmetrics.image import PeakSignalNoiseRatio, LearnedPerceptualImagePatchSimilarity
 from skimage.metrics import peak_signal_noise_ratio
-from tools.inject_backdoor import patch_trigger
+# from tools.inject_backdoor import patch_trigger
 from tools.dataset import get_de_normalization
 from tools.img import tensor2ndarray
 import tqdm
@@ -29,6 +29,10 @@ def cal_ssim_psnr(target_folder):
     psnr_function = PeakSignalNoiseRatio(data_range=1.0).to(f'cuda:{config.device}')
     de_norm = get_de_normalization(config.dataset_name)
 
+    sys.path.append('./run')
+    sys.path.append(target_folder)
+    from inject_backdoor import patch_trigger
+
     ssim_metric = 0.
     psnr_metric = 0.
     lpips_metric = 0.
@@ -44,6 +48,7 @@ def cal_ssim_psnr(target_folder):
         poison_batch = torch.stack(poison_batch, dim=0)
         batch = batch.to(f'cuda:{config.device}')
         poison_batch = poison_batch.to(f'cuda:{config.device}')
+        poison_batch = torch.clamp(poison_batch, 0, 1)
         ssim_metric += ssim_function(poison_batch, batch).item()
         psnr_metric += psnr_function(poison_batch, batch).item()
         lpips_metric += lp_function(poison_batch, batch).item()

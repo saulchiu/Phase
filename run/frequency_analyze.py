@@ -20,7 +20,7 @@ import random
 
 
 if __name__ == '__main__':
-    target_folder = '../' + 'results/imagenette/ftrojan/20241009024739_resnet'
+    target_folder = '../' + 'results/imagenette/inba/20241015101928'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -40,10 +40,9 @@ if __name__ == '__main__':
     for i in tqdm(range(total)):
         x_space = batch[i]  # this is a tensor
         y = labels[i]
-        x_space_poison = patch_trigger(
-            get_de_normalization(config.dataset_name)(x_space).squeeze(),
-            config)  # tensor too
         x_space = get_de_normalization(config.dataset_name)(x_space).squeeze()
+        x_space_poison = patch_trigger(x_space, config)  # tensor too
+        x_space_poison = torch.clip(x_space_poison, 0, 1)
         x_space, x_space_poison = tensor2ndarray(x_space), tensor2ndarray(x_space_poison)
         
         if visible_tf == 'dct':

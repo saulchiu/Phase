@@ -6,7 +6,7 @@ import torch
 from models.preact_resnet import PreActResNet18
 from tools.dataset import get_dataloader, get_dataset_class_and_scale, get_de_normalization
 import torch.nn.functional as F
-from tools.inject_backdoor import patch_trigger
+# from tools.inject_backdoor import patch_trigger
 
 def cal_acc_asr(target_folder):
     target_folder = '../' + target_folder
@@ -49,6 +49,9 @@ def cal_acc_asr(target_folder):
     
     correct = 0
     total = 0
+    sys.path.append('./run')
+    sys.path.append(target_folder)
+    from inject_backdoor import patch_trigger
     with torch.no_grad():
         for inputs, targets in test_dl:
             inputs, targets = inputs.to(device), targets.to(device)

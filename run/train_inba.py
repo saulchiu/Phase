@@ -30,6 +30,20 @@ from torchvision.models.convnext import ConvNeXt, CNBlockConfig
 from tools.utils import manual_seed
 from tools.dataset import PoisonDataset, get_train_and_test_dataset
 
+def get_model(name, num_class, device):
+    if name == "resnet18":
+        from models.preact_resnet import PreActResNet18
+        net = PreActResNet18(num_classes=num_class).to(device)
+    elif name == "rnp":
+        from models.resnet_cifar import resnet18
+        net = resnet18(num_classes=num_class).to(device)
+    elif name == "repvgg":
+        from repvgg_pytorch.repvgg import RepVGG
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device)
+    else:
+        raise NotImplementedError(name)
+    return net
+
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
     assert config.attack.name == "inba"
@@ -39,7 +53,7 @@ def train_mdoel(config: DictConfig):
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     config.path = target_folder
-    train_target_path = os.path.join(target_folder, 'train.py')
+    train_target_path = os.path.join(target_folder, 'train_inba.py')
     shutil.copy(__file__, train_target_path)
     train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
     shutil.copy('../models/cnn_lightning_model.py', train_target_path)
@@ -56,26 +70,20 @@ def train_mdoel(config: DictConfig):
         num_workers=config.num_workers
     )
     num_classes, _ = get_dataset_class_and_scale(config.dataset_name)
-    if config.model == "resnet18":
-        net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
-    elif config.model == "rnp":
-        from models.resnet_cifar import resnet18
-        net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
-    elif config.model == "repvgg":
-        from repvgg_pytorch.repvgg import RepVGG
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
-    else:
-        raise NotImplementedError(config.model)
-    model = INBALightningModule(net, config)
+    device = f'cuda:{config.device}' if config.device != "cpu" else "cpu"
+
+    # train trigger
+    net = get_model(config.model, num_classes, device=device)
+    model = INBALightningModule(net, config, mode="trigger")
     logger = CSVLogger(save_dir=target_folder, name='log')
-    assert config.epoch > config.val_epoch
-    assert config.epoch > config.attack.tg_epoch
-    trainer = L.Trainer(max_epochs=config.epoch + config.attack.tg_epoch, devices=[config.device], logger=logger, default_root_dir=target_folder)
+    trainer = L.Trainer(max_epochs=config.attack.tg_epoch, devices=[config.device], default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=train_dl)
-    torch.save({
-    "mask": model.mask,
-    },
-    f'{target_folder}/trigger.pth')
+
+    # train model
+    net = get_model(config.model, num_classes, device=device)
+    model = INBALightningModule(net, config, mode="model")
+    trainer = L.Trainer(max_epochs=config.epoch, devices=[config.device], logger=logger, default_root_dir=target_folder)
+    trainer.fit(model=model, train_dataloaders=train_dl)
     if config.model == "repvgg":
         model.model.deploy =True
     model.eval()
@@ -85,7 +93,6 @@ def train_mdoel(config: DictConfig):
     res = {
     "model": model.model.state_dict(),
     "param_opt": model.param_opt.state_dict(),
-    "tg_opt": model.tg_opt.state_dict(),
     "schedule": model.scheduler.state_dict(),
     "config": config,
     "epoch": model.current_epoch,
