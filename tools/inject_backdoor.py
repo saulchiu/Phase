@@ -34,22 +34,8 @@ class BadTransform(object):
         x_p = patch_trigger(x_c, self.config)
         return x_p
 
-def init_inba_tg(config):
-    size = config.attack.wind
-    mode = config.attack.mode
 
-    if mode == "gaussian":
-        tg_spatial = torch.randn((size, size))
-        tg_fft = torch.fft.fft2(tg_spatial)
-        tg = torch.imag(tg_fft)
-    elif mode == "const":
-        tg = torch.zeros(size=(size, size))
-        raise NotImplementedError(mode)
-    tg.requires_grad_(True)
-    return tg
-
-
-def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
+def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any clip operation here.
     """
     add a trigger to the original image given attack method
     :param x_0:
@@ -229,9 +215,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_re = x_re.astype(np.float32)
         x_p = ndarray2tensor(x_re)
     elif attack_name == 'inba':
-        # do not do any clip operation here.
         ld = torch.load(f'{config.path}/trigger.pth')
-        # tg = ld['trigger'].to(device)
         m = ld['mask'].to(device)
 
         x_p = x_0.clone()

@@ -3,7 +3,7 @@ import sys
 sys.path.append('../')
 from tools.img import tensor2ndarray, rgb2yuv, yuv2rgb, plot_space_target_space, dct_2d_3c_slide_window, dct_2d_3c_full_scale
 from tools.dataset import get_dataloader, get_de_normalization, get_dataset_class_and_scale
-from tools.inject_backdoor import patch_trigger
+# from tools.inject_backdoor import patch_trigger
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -20,7 +20,7 @@ import random
 
 
 if __name__ == '__main__':
-    target_folder = '../' + 'results/imagenette/inba/20241015101928'
+    target_folder = '../' + 'results/celeba/inba/20241017134115_ab3'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -36,7 +36,9 @@ if __name__ == '__main__':
 
     x_c4show = None
     x_p4show = None
-    
+    sys.path.append('./run')
+    sys.path.append(target_folder)
+    from inject_backdoor import patch_trigger
     for i in tqdm(range(total)):
         x_space = batch[i]  # this is a tensor
         y = labels[i]
@@ -69,7 +71,7 @@ if __name__ == '__main__':
         res_before += x_f
         res_after += x_f_poison
         # if y.item() == 9 and x_p4show is None:
-        if y.item() == 9:
+        if y.item() == 1:
             x_c4show = x_space
             x_p4show = x_space_poison
     res_before /= total

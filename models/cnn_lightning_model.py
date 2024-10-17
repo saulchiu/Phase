@@ -193,7 +193,7 @@ class INBALightningModule(L.LightningModule):
                 threshold = self.config.attack.threshold
                 mask_coeff = self.config.attack.mask_coeff
 
-                sorted_mask, _ = torch.sort(self.mask.view(-1))  # 展平mask并排序
+                sorted_mask, _ = torch.sort(self.mask.view(-1))
                 quantile_index = int(threshold * sorted_mask.numel())
                 quantile_value = sorted_mask[quantile_index]
                 modified_mask = torch.where(self.mask > quantile_value,
@@ -307,7 +307,6 @@ class INBALightningModule(L.LightningModule):
             self.manual_backward(loss_poison, retain_graph=True)
             self.tg_opt.step()
             self.tg_opt.zero_grad()
-        # print(self.trigger)
         y_p = self.forward(x)
         loss = self.criterion(y_p, y.long())
         _, predicted = torch.max(y_p, -1)

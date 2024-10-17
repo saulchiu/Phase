@@ -49,6 +49,8 @@ def cal_ssim_psnr(target_folder):
         batch = batch.to(f'cuda:{config.device}')
         poison_batch = poison_batch.to(f'cuda:{config.device}')
         poison_batch = torch.clamp(poison_batch, 0, 1)
+        batch = torch.clamp(batch, 0, 1)
+        poison_batch = torch.clamp(poison_batch, 0, 1)
         ssim_metric += ssim_function(poison_batch, batch).item()
         psnr_metric += psnr_function(poison_batch, batch).item()
         lpips_metric += lp_function(poison_batch, batch).item()
@@ -83,6 +85,7 @@ def cal_ssim_psnr(target_folder):
     ax[1].imshow(tensor2ndarray(x_p))
     ax[1].set_title('x_p')
     plt.show()
+    return ssim_metric, psnr_metric, lpips_metric
 
 
 if __name__ == "__main__":

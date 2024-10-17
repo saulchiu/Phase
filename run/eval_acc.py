@@ -33,6 +33,7 @@ def cal_acc_asr(target_folder):
 
     correct = 0
     total = 0
+    b_acc = 0
     net.eval()
     with torch.no_grad():
         for inputs, targets in test_dl:
@@ -43,32 +44,34 @@ def cal_acc_asr(target_folder):
             correct += (predicted == targets).sum().item()
     accuracy = 100 * correct / total
     print(f'Benign ACC: {accuracy:.4f}%')
+    b_acc = accuracy
 
     if config.attack.name == "benign":
         return
     
     correct = 0
     total = 0
+    p_acc = 0
     sys.path.append('./run')
     sys.path.append(target_folder)
     from inject_backdoor import patch_trigger
     with torch.no_grad():
         for inputs, targets in test_dl:
             inputs, targets = inputs.to(device), targets.to(device)
-            if config.attack.name != "inba":
-                inputs = get_de_normalization(config.dataset_name)(inputs)
             bd_inpus = []
             for i in range(inputs.shape[0]):
                 bd_inpus.append(patch_trigger(inputs[i], config))
             bd_inpus = torch.stack(bd_inpus, dim=0)
             targets = targets - targets + config.target_label
-            # print(targets)
             outputs = net(bd_inpus)
             _, predicted = torch.max(outputs, 1)
             total += targets.size(0)
             correct += (predicted == targets).sum().item()
     accuracy = 100 * correct / total
+    p_acc = accuracy
     print(f'{config.attack.name} ASR: {accuracy:.4f}%')
+    return b_acc, p_acc
+
 
 
 if __name__ == "__main__":

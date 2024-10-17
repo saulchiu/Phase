@@ -112,9 +112,23 @@ def train_mdoel(config: DictConfig):
     shutil.copy(__file__, main_target_path)
     train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
     shutil.copy('../models/cnn_lightning_model.py', train_target_path)
+    train_target_path = os.path.join(target_folder, 'inject_backdoor.py')
+    shutil.copy('../tools/inject_backdoor.py', train_target_path)
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
+
+    from run.eval_acc import cal_acc_asr
+    from run.eval_ssim import cal_ssim_psnr
+    b_acc, p_acc = cal_acc_asr(target_folder.split('../')[-1])
+    ssim_metric, psnr_metric, lpips_metric = cal_ssim_psnr(target_folder.split('../')[-1])
+    file_path = f"{target_folder}/metric.txt"
+    with open(file_path, 'w') as file:
+        file.write(f"BA: {b_acc}\n")
+        file.write(f"ASR: {p_acc}\n")
+        file.write(f"SSIM: {ssim_metric}\n")
+        file.write(f"PSNR: {psnr_metric}\n")
+        file.write(f"LPIPS: {lpips_metric}\n")
 
 
 

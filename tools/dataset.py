@@ -117,10 +117,6 @@ class PoisonDataset(Dataset):
     def __getitem__(self, index):
         x, y = self.dataset[index]
         do_poison = (random.random() < self.config.ratio) and self.config.attack.name != 'benign'
-        # if self.config.attack.name == 'inba':
-        #     do_de_norm = False  # in train stage do not perform normalization operation.
-        # else:
-        #     do_de_norm = True
         do_de_norm = False
         if do_poison:
             if do_de_norm:
