@@ -1,6 +1,7 @@
 name: inba
 ssim_coeff: 10
-tg_epoch: 20
-threshold: 0.75  # for mask
-mask_coeff: 0.8  # for mask
-tg_size: 14  # for trigger
+tg_size: 14
+# [-1, -0.5, 0, 0.5, 1]
+u_pi_coeff: 1
+v_pi_coeff: 1
+v_size_coeff: 0.5

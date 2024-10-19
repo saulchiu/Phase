@@ -215,20 +215,24 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         x_re = x_re.astype(np.float32)
         x_p = ndarray2tensor(x_re)
     elif attack_name == 'inba':
-        ld = torch.load(f'{config.path}/trigger.pth')
-        m = ld['mask'].to(device)
+        # ld = torch.load(f'{config.path}/trigger.pth')
+        # u_tg = ld['u_tg'].to(device)
+        # v_tg = ld['v_tg'].to(device)
 
         x_p = x_0.clone()
         x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
+        u_pi_coeff = config.attack.u_pi_coeff
+        v_pi_coeff = config.attack.v_pi_coeff
+        v_size_coeff = config.attack.v_size_coeff
         
         # Y channel
-        x_y = x_yuv[0]
-        x_y_fft = torch.fft.fft2(x_y)
-        x_y_fft_real = torch.real(x_y_fft)
-        x_y_fft_imag = torch.imag(x_y_fft) * m
-        x_y_fft = x_y_fft_real + 1j * x_y_fft_imag
-        x_y = torch.real(torch.fft.ifft2(x_y_fft))
-        x_yuv[0] = x_y
+        # x_y = x_yuv[0]
+        # x_y_fft = torch.fft.fft2(x_y)
+        # x_y_fft_real = torch.real(x_y_fft)
+        # x_y_fft_imag = torch.imag(x_y_fft) * m
+        # x_y_fft = x_y_fft_real + 1j * x_y_fft_imag
+        # x_y = torch.real(torch.fft.ifft2(x_y_fft))
+        # x_yuv[0] = x_y
 
         # U channel
         scale = x_0.shape[-1]
@@ -238,19 +242,19 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         x_u_fft = torch.fft.fft2(x_u)
         x_u_fft_amp = torch.abs(x_u_fft)
         x_u_fft_pha = torch.angle(x_u_fft)
-        x_u_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = torch.tensor(math.pi, device=x_0.device)
+        x_u_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = math.pi * u_pi_coeff
         x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
         x_u = torch.fft.ifft2(x_u_fft)
         x_u = torch.real(x_u)
         x_yuv[1] = x_u
 
         # V channel
-        tg_size = int(tg_size / 2)
+        tg_size = int(tg_size * v_size_coeff)
         x_v = x_yuv[2]
         x_v_fft = torch.fft.fft2(x_v)
         x_v_fft_amp = torch.abs(x_v_fft)
         x_v_fft_pha = torch.angle(x_v_fft)
-        x_v_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = torch.tensor(math.pi, device=x_0.device)
+        x_v_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = math.pi * v_pi_coeff
         x_v_fft = x_v_fft_amp * torch.exp(1j * x_v_fft_pha)
         x_v = torch.fft.ifft2(x_v_fft)
         x_v = torch.real(x_v)

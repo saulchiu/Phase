@@ -156,13 +156,19 @@ class INBALightningModule(L.LightningModule):
         self.model_state_dict_backup = model.state_dict().copy()
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.amp)
         if mode == "trigger":  # train trigger or mask
+            # raise NotImplementedError
             print('------')
             print('train trigger')
             print('------')
-            self.mask = torch.nn.Parameter(
-                torch.ones(size=(scale, scale), device=self.device)
+            tg_size = config.attack.tg_size * 2
+            self.u_tg = torch.nn.Parameter(
+                torch.full((tg_size, tg_size), math.pi, requires_grad=True)
             )
-            self.tg_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, [self.mask]),
+            tg_size = int(config.attack.tg_size * config.attack.v_size_coeff) * 2
+            self.v_tg = torch.nn.Parameter(
+                torch.full((tg_size, tg_size), math.pi, requires_grad=True)
+            )
+            self.tg_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, [self.u_tg, self.v_tg]),
                                         lr=self.config.lr, 
                                         momentum=self.config.momentum, 
                                         weight_decay=self.config.weight_decay)
@@ -175,7 +181,8 @@ class INBALightningModule(L.LightningModule):
             print('------')
             print('train model')
             print('------')
-            self.mask = torch.load(f'{config.path}/trigger.pth')['mask']
+            self.u_tg = torch.load(f'{config.path}/trigger.pth')['u_tg']
+            self.v_tg = torch.load(f'{config.path}/trigger.pth')['v_tg']
             self.param_opt = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()),
                                         lr=self.config.lr, 
                                         momentum=self.config.momentum, 
@@ -190,29 +197,15 @@ class INBALightningModule(L.LightningModule):
         self.scheduler.step()
         if self.mode == "trigger":
             if self.trainer.current_epoch == self.config.attack.tg_epoch - 1:
-                threshold = self.config.attack.threshold
-                mask_coeff = self.config.attack.mask_coeff
-
-                sorted_mask, _ = torch.sort(self.mask.view(-1))
-                quantile_index = int(threshold * sorted_mask.numel())
-                quantile_value = sorted_mask[quantile_index]
-                modified_mask = torch.where(self.mask > quantile_value,
-                                            torch.ones_like(self.mask),
-                                            mask_coeff).detach()
-                mask_coeff_mask = torch.eq(modified_mask, mask_coeff)
-                num_mask_coeffs = torch.sum(mask_coeff_mask)
-                total_elements = modified_mask.numel()
-
-                print('------')
-                print(f'mask_coeff {mask_coeff} ratio: {num_mask_coeffs / total_elements:.2f}%')
-                print('------')
-
-                modified_mask.requires_grad_(False) 
                 tg = {
-                    "raw_mask": self.mask,
-                    "mask": modified_mask,
-                }                 
+                    "u_tg": torch.clamp(self.u_tg.data.detach(), -math.pi, math.pi),
+                    "v_tg": torch.clamp(self.v_tg.data.detach(), -math.pi, math.pi)
+                }
+                print('-' * 10)
+                print(tg['u_tg'][:,0])
+                print('-' * 10)
                 torch.save(tg, f'{self.config.path}/trigger.pth')
+            # raise NotImplementedError
             return
         if self.mode == "model":
             metrics = {
@@ -247,13 +240,13 @@ class INBALightningModule(L.LightningModule):
                 x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
                 
                 # Y channel
-                x_y = x_yuv[0]
-                x_y_fft = torch.fft.fft2(x_y)
-                x_y_fft_real = torch.real(x_y_fft)
-                x_y_fft_imag = torch.imag(x_y_fft) * self.mask.clone()
-                x_y_fft = x_y_fft_real + 1j * x_y_fft_imag
-                x_y = torch.real(torch.fft.ifft2(x_y_fft))
-                x_yuv[0] = x_y
+                # x_y = x_yuv[0]
+                # x_y_fft = torch.fft.fft2(x_y)
+                # x_y_fft_real = torch.real(x_y_fft)
+                # x_y_fft_imag = torch.imag(x_y_fft) * self.mask.clone()
+                # x_y_fft = x_y_fft_real + 1j * x_y_fft_imag
+                # x_y = torch.real(torch.fft.ifft2(x_y_fft))
+                # x_yuv[0] = x_y
 
                 # U channel
                 scale = x.shape[-1]
@@ -263,19 +256,19 @@ class INBALightningModule(L.LightningModule):
                 x_u_fft = torch.fft.fft2(x_u)
                 x_u_fft_amp = torch.abs(x_u_fft)
                 x_u_fft_pha = torch.angle(x_u_fft)
-                x_u_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = torch.tensor(math.pi, device=self.device)
+                x_u_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = self.u_tg
                 x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
                 x_u = torch.fft.ifft2(x_u_fft)
                 x_u = torch.real(x_u)
                 x_yuv[1] = x_u
 
                 # V channel
-                tg_size = int(tg_size / 2)
+                tg_size = int(tg_size * self.config.attack.v_size_coeff)
                 x_v = x_yuv[2]
                 x_v_fft = torch.fft.fft2(x_v)
                 x_v_fft_amp = torch.abs(x_v_fft)
                 x_v_fft_pha = torch.angle(x_v_fft)
-                x_v_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = torch.tensor(math.pi, device=self.device)
+                x_v_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = self.v_tg
                 x_v_fft = x_v_fft_amp * torch.exp(1j * x_v_fft_pha)
                 x_v = torch.fft.ifft2(x_v_fft)
                 x_v = torch.real(x_v)

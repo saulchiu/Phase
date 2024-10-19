@@ -20,7 +20,7 @@ import random
 
 
 if __name__ == '__main__':
-    target_folder = '../' + 'results/celeba/inba/20241017134115_ab3'
+    target_folder = '../' + 'results/imagenette/inba/20241018041919_ab4_best'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
