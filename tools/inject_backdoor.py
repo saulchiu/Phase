@@ -23,6 +23,7 @@ import torch.nn.functional as F
 from omegaconf import OmegaConf, DictConfig
 import random
 import math
+import pywt
 
 
 class BadTransform(object):
@@ -157,33 +158,61 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         x_0 = bad_transform(Image.fromarray(tensor2ndarray(x_0)), 1)
         x_p = trans(x_0)
     elif attack_name == 'duba':
-        x_c = tensor2ndarray(x_0) / 255.  # scale to 0~1
+        # x_c = tensor2ndarray(x_0) / 255.  # scale to 0~1
+        x_c = tensor2ndarray(x_0)
         x_p_img = PIL.Image.open('../resource/DUBA/64.png')
         wave = 'db2'
-        alpha = beta = 0.4
+        alpha = beta = config.attack.alpha
 
         # do 3-level dwt for x_c
         x_c_re = np.zeros_like(x_c)
-        for i in range(3):  # 3 channel
-            L_1, (H_11, H_12, H_13) = pywt.dwt2(x_c[:, :, i], wave)
-            L_2, (H_21, H_22, H_23) = pywt.dwt2(L_1, wave)
-            L_3, (H_31, H_32, H_33) = pywt.dwt2(L_2, wave)
+        # for i in range(3):  # 3 channel
+        #     L_1, (H_11, H_12, H_13) = pywt.dwt2(x_c[:, :, i], wave)
+        #     L_2, (H_21, H_22, H_23) = pywt.dwt2(L_1, wave)
+        #     L_3, (H_31, H_32, H_33) = pywt.dwt2(L_2, wave)
 
-            x_p1 = np.array(x_p_img.resize((L_1.shape[0], L_1.shape[1]))) / 255.
-            _, (HP_21, HP_22, HP_23) = pywt.dwt2(x_p1[:, :, i], wave)
-            x_p2 = np.array(x_p_img.resize((L_2.shape[0], L_2.shape[1]))) / 255.
-            _, (HP_31, HP_32, HP_33) = pywt.dwt2(x_p2[:, :, i], wave)
+        #     x_p1 = np.array(x_p_img.resize((L_1.shape[0], L_1.shape[1])))
+        #     _, (HP_21, HP_22, HP_23) = pywt.dwt2(x_p1[:, :, i], wave)
+        #     x_p2 = np.array(x_p_img.resize((L_2.shape[0], L_2.shape[1])))
+        #     _, (HP_31, HP_32, HP_33) = pywt.dwt2(x_p2[:, :, i], wave)
 
-            H_21 = beta * H_21 + (1 - beta) * HP_21
-            H_22 = beta * H_22 + (1 - beta) * HP_22
-            H_23 = beta * H_23 + (1 - beta) * HP_23
+        #     H_21 = beta * H_21 + (1 - beta) * HP_21
+        #     H_22 = beta * H_22 + (1 - beta) * HP_22
+        #     H_23 = beta * H_23 + (1 - beta) * HP_23
 
-            H_31 = alpha * H_31 + (1 - alpha) * HP_31
-            H_32 = alpha * H_32 + (1 - alpha) * HP_32
-            H_33 = alpha * H_33 + (1 - alpha) * HP_33
+        #     H_31 = alpha * H_31 + (1 - alpha) * HP_31
+        #     H_32 = alpha * H_32 + (1 - alpha) * HP_32
+        #     H_33 = alpha * H_33 + (1 - alpha) * HP_33
 
-            res_coe = [L_3, (H_31, H_32, H_33), (H_21, H_22, H_23), (H_11, H_12, H_13)]
-            x_c_re[:, :, i] = pywt.waverec2(coeffs=res_coe, wavelet=wave)
+        #     res_coe = [L_3, (H_31, H_32, H_33), (H_21, H_22, H_23), (H_11, H_12, H_13)]
+        #     x_c_re[:, :, i] = pywt.waverec2(coeffs=res_coe, wavelet=wave)
+        
+        [cl,(cH3,cV3,cD3),(cH2,cV2,cD2),(cH1,cV1,cD1)] = pywt.wavedec2(x_c, wavelet=wave, level=3, axes=(0, 1))
+        # get the resize shape
+        L1, (_, _, _) = pywt.wavedec2(x_c, wavelet=wave, level=1, axes=(0, 1))
+        L2, (_, _, _), (_, _, _) = pywt.wavedec2(x_c, wavelet=wave, level=2, axes=(0, 1))
+        x_p = np.array(x_p_img.resize((h, w)))
+        x_p1 = np.array(x_p_img.resize((L1.shape[0], L1.shape[1])))
+        x_p2 = np.array(x_p_img.resize((L2.shape[0], L2.shape[1])))
+        [_, (ch1, cv1, cd1)] = pywt.wavedec2(x_p2, 'db2', level=1, axes=(0, 1))
+        # [_, (chb1, cvb1, cdb1)] = pywt.wavedec2(x_p1, 'db2', level=1, axes=(0, 1))
+        [cb1, (chb1, cvb1, cdb1),(chb2, cvb2, cdb2)] = pywt.wavedec2(x_p, wave, level=2, axes=(0, 1))       
+
+        cH3 = cH3 * alpha + ch1 * (1 - alpha)
+        cV3 =  cV3 * alpha + cv1 * (1 - alpha)
+        cD3 =  cD3 * alpha + cd1 * (1 - alpha)
+        # cH3 = cH3 + ch1 * (1 - alpha)
+        # cV3 =  cv1 * (1 - alpha)
+        # cD3 =  cd1 * (1 - alpha)
+
+        cH2 = cH2 * beta + chb1 * (1 - beta)
+        cV2 =  cV2 * beta + cvb1 * (1 - beta)
+        cD2 = cD2 * beta + cdb1 * (1 - beta)
+        # cH2 = cH2 + chb1 * (1 - beta)
+        # cV2 =  cvb1 * (1 - beta)
+        # cD2 = cdb1 * (1 - beta)
+        x_c_re = pywt.waverec2([cl,(cH3,cV3,cD3),(cH2,cV2,cD2),(cH1,cV1,cD1)], wave, axes=(0, 1))
+        x_c_re = np.array(x_c_re,np.float32)
 
         # exchange amplitude
         x_c_f = np.fft.fft2(x_c, axes=(-2, -3))
@@ -196,7 +225,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         x_re = np.fft.ifft2(x_re_f, axes=(-2, -3)).real
 
         # blend DCT frequency
-        lamb = 0.7
+        lamb = config.attack.lamb 
         x_re_dct_1 = dct_2d_3c_slide_window(x_re.astype(float))
         x_c_dct_1 = dct_2d_3c_slide_window(x_c.astype(float))
         x_re_dct_2 = dct_2d_3c_slide_window(x_re_dct_1.astype(float))
@@ -208,8 +237,8 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
 
         # x_re = np.clip(x_re, 0, 1)
         # mask trigger
-        x_re *= 255.
-        x_c *= 255.
+        # x_re *= 255.
+        # x_c *= 255.
         x_re[x_c >= 220] = x_c [x_c >= 220]
         x_re[x_c <= 30] = x_c[x_c <= 30]
         x_re = x_re.astype(np.float32)
