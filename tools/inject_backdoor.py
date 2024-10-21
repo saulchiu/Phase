@@ -117,9 +117,9 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
             return grid_temps
 
         image_size = x_0.shape[1]
-        grid_path = f'../resource/wanet/grid_{image_size}.pth'
-        k = 4
-        s = 0.5
+        grid_path = f'{config.path}/grid.pth'
+        k = config.attack.k
+        s = config.attack.s
         if os.path.exists(grid_path):
             grid_temps = get_wanet_grid(image_size, grid_path, s)
         else:

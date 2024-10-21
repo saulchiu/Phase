@@ -20,14 +20,13 @@ import random
 
 
 if __name__ == '__main__':
-    target_folder = '../' + 'results/cifar10/duba/20241020220737'
+    target_folder = '../' + 'results/imagenette/duba/20241021012349'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
-    config.attack.name = "duba"
     manual_seed(config.seed)
     device = 'cpu' 
     visible_tf = 'dct'
-    total = 128
+    total = 1024
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     train_dl, test_dl = get_dataloader(config.dataset_name, total, config.pin_memory, config.num_workers)
     res_before = np.zeros((scale, scale, 3), dtype=np.float32)
