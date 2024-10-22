@@ -104,7 +104,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         x_0 = tensor2ndarray(x_0)
         np.clip(x_0.astype(float) + trigger_array, 0, 255).astype(np.uint8)
         x_p = ndarray2tensor(x_0)
-    elif attack_name == 'wanet':
+    elif attack_name == 'wanet':  # num_workers should be 1!
         def get_wanet_grid(image_size, grid_path: str, s: float, device='cpu'):
             grid = torch.load(grid_path)
             noise_grid = grid['noise_grid']
@@ -122,6 +122,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         s = config.attack.s
         if os.path.exists(grid_path):
             grid_temps = get_wanet_grid(image_size, grid_path, s)
+            grid_temps = grid_temps.to(x_0.device)
         else:
             ins = torch.rand(1, 2, k, k) * 2 - 1
             ins = ins / torch.mean(torch.abs(ins))
@@ -267,39 +268,40 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         scale = x_0.shape[-1]
         tg_pos = int(scale / 2)
         tg_size = config.attack.tg_size
-        x_u = x_yuv[1]
-        x_u_fft = torch.fft.fft2(x_u)
-        x_u_fft_amp = torch.abs(x_u_fft)
-        x_u_fft_pha = torch.angle(x_u_fft)
-        x_u_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = math.pi * u_pi_coeff
-        x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
-        x_u = torch.fft.ifft2(x_u_fft)
-        x_u = torch.real(x_u)
-        x_yuv[1] = x_u
+        if config.attack.u == 1:
+            x_u = x_yuv[1]
+            x_u_fft = torch.fft.fft2(x_u)
+            x_u_fft_amp = torch.abs(x_u_fft)
+            x_u_fft_pha = torch.angle(x_u_fft)
+            x_u_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = math.pi * u_pi_coeff
+            x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
+            x_u = torch.fft.ifft2(x_u_fft)
+            x_u = torch.real(x_u)
+            x_yuv[1] = x_u
 
         # V channel
         tg_size = int(tg_size * v_size_coeff)
-        x_v = x_yuv[2]
-        x_v_fft = torch.fft.fft2(x_v)
-        x_v_fft_amp = torch.abs(x_v_fft)
-        x_v_fft_pha = torch.angle(x_v_fft)
-        x_v_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = math.pi * v_pi_coeff
-        x_v_fft = x_v_fft_amp * torch.exp(1j * x_v_fft_pha)
-        x_v = torch.fft.ifft2(x_v_fft)
-        x_v = torch.real(x_v)
-        x_yuv[2] = x_v
+        if config.attack.v == 1:
+            x_v = x_yuv[2]
+            x_v_fft = torch.fft.fft2(x_v)
+            x_v_fft_amp = torch.abs(x_v_fft)
+            x_v_fft_pha = torch.angle(x_v_fft)
+            x_v_fft_pha[tg_pos-tg_size:tg_pos+tg_size, tg_pos-tg_size:tg_pos+tg_size] = math.pi * v_pi_coeff
+            x_v_fft = x_v_fft_amp * torch.exp(1j * x_v_fft_pha)
+            x_v = torch.fft.ifft2(x_v_fft)
+            x_v = torch.real(x_v)
+            x_yuv[2] = x_v
         
         x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
 
-        x_c = x_0.clone()
         # mix amp
-        x_c_fft = torch.fft.fft2(x_c, dim=(1, 2))
-        x_p_fft = torch.fft.fft2(x_p, dim=(1, 2))
-        x_p_fft = torch.abs(x_c_fft) * torch.exp(1j * torch.angle(x_p_fft))
-        x_p = torch.fft.ifft2(x_p_fft, dim=(1, 2))
-
-        x_p = torch.real(x_p)
-
+        if config.attack.amp == 1:
+            x_c = x_0.clone()
+            x_c_fft = torch.fft.fft2(x_c, dim=(1, 2))
+            x_p_fft = torch.fft.fft2(x_p, dim=(1, 2))
+            x_p_fft = torch.abs(x_c_fft) * torch.exp(1j * torch.angle(x_p_fft))
+            x_p = torch.fft.ifft2(x_p_fft, dim=(1, 2))
+            x_p = torch.real(x_p)
     else:
         raise NotImplementedError(attack_name)
     x_p = x_p.to(x_0.device)

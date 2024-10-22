@@ -27,7 +27,7 @@ if __name__ == '__main__':
     manual_seed(config.seed)
     device = 'cpu' 
     visible_tf = 'dct'
-    total = 1024
+    total = 128
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     train_dl, test_dl = get_dataloader(config.dataset_name, total, config.pin_memory, config.num_workers)
 
@@ -61,7 +61,7 @@ if __name__ == '__main__':
         amp_after += amp_p
         pha_after += pha_p
         # if y.item() == 9 and x_p4show is None:
-        if y.item() == 1:
+        if y.item() == 1 or total <= 128:
             x_c4show = x_space
             x_p4show = x_space_poison
     amp_before /= total
@@ -74,6 +74,11 @@ if __name__ == '__main__':
     amp_before = np.log1p(np.abs(amp_before)).astype(np.uint8)
     amp_after = np.log1p(np.abs(amp_after)).astype(np.uint8)
 
+    # pha_before = pha_before / np.max(pha_before)
+    # pha_after = pha_after / np.max(pha_after)
+    # pha_before = np.log1p(np.abs(pha_before)).astype(np.uint8)
+    # pha_after = np.log1p(np.abs(pha_after)).astype(np.uint8)
+
     amp_before = np.fft.fftshift(amp_before, axes=(0, 1))
     amp_after = np.fft.fftshift(amp_after, axes=(0, 1))
 
@@ -84,12 +89,12 @@ if __name__ == '__main__':
     for axes in ax.flat:
         axes.set_axis_off()
     ax[0, 0].imshow(x_c4show)
-    ax[0, 1].imshow(amp_before)
-    ax[0, 2].imshow(pha_before)
+    ax[0, 1].imshow(amp_before[:, :, 0])
+    ax[0, 2].imshow(pha_before[:, :, 0])
 
     ax[1, 0].imshow(x_p4show)
-    ax[1, 1].imshow(amp_after)
-    ax[1, 2].imshow(pha_after)
+    ax[1, 1].imshow(amp_after[:, :, 0])
+    ax[1, 2].imshow(pha_after[:, :, 0])
 
     plt.show()
     

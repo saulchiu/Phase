@@ -5,3 +5,7 @@ tg_size: 14
 u_pi_coeff: 1
 v_pi_coeff: 1
 v_size_coeff: 0.5
+
+u: 1
+v: 1
+amp: 1
