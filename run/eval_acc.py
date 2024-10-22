@@ -1,6 +1,6 @@
 import sys
 sys.path.append('../')
-from tools.utils import manual_seed
+from tools.utils import manual_seed, get_model
 from omegaconf import OmegaConf
 import torch
 from models.preact_resnet import PreActResNet18
@@ -15,17 +15,7 @@ def cal_acc_asr(target_folder):
     manual_seed(config.seed)
     device = f'cuda:{config.device}'
     num_class, _ = get_dataset_class_and_scale(config.dataset_name)
-    if config.model == "resnet18":
-        net = PreActResNet18(num_class)
-    elif config.model == "rnp":
-        from models.resnet_cifar import resnet18
-        net = resnet18(num_classes=num_class).to(f'cuda:{config.device}')
-    elif config.model == "repvgg":
-        from repvgg_pytorch.repvgg import RepVGG
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
-        net.deploy = True
-    else:
-        raise NotImplementedError(config.model)
+    net = get_model(config.model, num_class, device=device)
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
     net.load_state_dict(ld['model'])
     train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
@@ -47,7 +37,7 @@ def cal_acc_asr(target_folder):
     b_acc = accuracy
 
     if config.attack.name == "benign":
-        return
+        return accuracy, "-"
     
     correct = 0
     total = 0

@@ -13,6 +13,17 @@ import os
 from tools.dataset import get_dataset_class_and_scale
 import math
 
+def get_optimizer(model, learning_rate, weight_decay):
+    param_dict = {pn: p for pn, p in model.named_parameters()}
+    parameters_decay, parameters_no_decay = model.separate_parameters()
+    
+    optim_groups = [
+        {"params": [param_dict[pn] for pn in parameters_decay], "weight_decay": weight_decay},
+        {"params": [param_dict[pn] for pn in parameters_no_decay], "weight_decay": 0.0},
+    ]
+    optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate)
+    return optimizer
+
 def visualize_metrics(metrics_list, target_folder):
     epochs = [m['epoch'] for m in metrics_list]
     train_loss = [m['train_loss_epoch'].cpu().item() if isinstance(m['train_loss_epoch'], torch.Tensor) else m['train_loss_epoch'] for m in metrics_list]
@@ -46,10 +57,16 @@ class BASELightningModule(L.LightningModule):
         self. cur_val_acc = 0.
         self.automatic_optimization = False
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.amp)
-        self.opt = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()),
-                                    lr=self.config.lr, 
-                                    momentum=self.config.momentum, 
-                                    weight_decay=self.config.weight_decay)
+        if config.model != "convnext":
+            self.opt = torch.optim.SGD(filter(lambda p: p.requires_grad, self.model.parameters()),
+                                        lr=self.config.lr, 
+                                        momentum=self.config.momentum, 
+                                        weight_decay=self.config.weight_decay)
+        else:
+            print("-" * 10)
+            print('use COnvNext opt')
+            print('-' * 10)
+            self.opt=get_optimizer(model, learning_rate=config.lr, weight_decay=config.weight_decay)
         self.schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, T_max=config.epoch)
         self.criterion = torch.nn.CrossEntropyLoss()
 

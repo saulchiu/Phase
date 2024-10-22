@@ -17,26 +17,12 @@ import os
 import shutil
 import yaml
 from pytorch_lightning.loggers import CSVLogger
-from tools.utils import manual_seed
+from tools.utils import manual_seed, get_model
 from tools.dataset import PoisonDataset, get_dataloader, get_train_and_test_dataset
 import matplotlib.pyplot as plt
 from pytorch_lightning.loggers import TensorBoardLogger
 from repvgg_pytorch.repvgg import RepVGG
 from torchvision.models.convnext import ConvNeXt, CNBlockConfig
-
-def get_model(name, num_class, device):
-    if name == "resnet18":
-        from models.preact_resnet import PreActResNet18
-        net = PreActResNet18(num_classes=num_class).to(device)
-    elif name == "rnp":
-        from models.resnet_cifar import resnet18
-        net = resnet18(num_classes=num_class).to(device)
-    elif name == "repvgg":
-        from repvgg_pytorch.repvgg import RepVGG
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device)
-    else:
-        raise NotImplementedError(name)
-    return net
 
 
 @hydra.main(version_base=None, config_path='../config', config_name='default')

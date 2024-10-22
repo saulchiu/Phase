@@ -1,5 +1,4 @@
 name: inba
-ssim_coeff: 10
 tg_size: 14
 # [-1, -0.5, 0, 0.5, 1]
 u_pi_coeff: 1
