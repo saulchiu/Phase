@@ -64,14 +64,14 @@ def train_mdoel(config: DictConfig):
     assert config.epoch >= config.val_epoch
     trainer = L.Trainer(max_epochs=config.epoch, devices=[config.device], logger=logger, default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=poison_train_dl)
-    print('----------benign----------')
-    if config.model == "repvgg":
-        model.model.deploy =True
-    trainer.test(model=model, dataloaders=test_dl)  # benign performance
-    if config.attack.name != 'benign':
-        poison_test_dl = DataLoader(poison_test_ds, batch_size=config.batch, shuffle=False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
-        print('----------poison----------')
-        trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
+    # print('----------benign----------')
+    # if config.model == "repvgg":
+    #     model.model.deploy =True
+    # trainer.test(model=model, dataloaders=test_dl)  # benign performance
+    # if config.attack.name != 'benign':
+    #     poison_test_dl = DataLoader(poison_test_ds, batch_size=config.batch, shuffle=False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
+    #     print('----------poison----------')
+    #     trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
     res = {
         "model": model.model.state_dict(),
         "param_opt": model.opt.state_dict(),
@@ -83,6 +83,9 @@ def train_mdoel(config: DictConfig):
     visualize_metrics(model.metrics_list, target_folder)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
 
+    """
+    evaluation
+    """
     from run.eval_acc import cal_acc_asr
     from run.eval_ssim import cal_ssim_psnr
     b_acc, p_acc = cal_acc_asr(target_folder.split('../')[-1])

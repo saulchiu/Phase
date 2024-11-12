@@ -97,7 +97,7 @@ class BASELightningModule(L.LightningModule):
         x, y = batch
         x = x.to(self.device, non_blocking=self.config.non_blocking)
         y = y.to(self.device, non_blocking=self.config.non_blocking)
-        with torch.cuda.amp.autocast(enabled=self.config.amp):
+        with torch.amp.autocast('cuda', enabled=self.config.amp):
             y_p = self.forward(x)
             loss = self.criterion(y_p, y.long())
         _, predicted = torch.max(y_p, -1)

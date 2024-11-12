@@ -39,3 +39,12 @@ def get_model(name, num_class, device):
     return net
 
 
+import os
+import shutil
+
+def rm_if_exist(folder):
+    if os.path.exists(folder):
+        shutil.rmtree(folder)
+        print(f"Folder '{folder}' has been removed.")
+    else:
+        print(f"Folder '{folder}' does not exist, no action taken.")

@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/exp",
+            "cwd": "/home/chengyiqiu/code/INBA/run/",
             "args": ["attack=inba", "model=repvgg"]
         }
     ]

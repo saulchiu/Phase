@@ -117,11 +117,20 @@ class PoisonDataset(Dataset):
     def __getitem__(self, index):
         x, y = self.dataset[index]
         do_poison = (random.random() < self.config.ratio) and self.config.attack.name != 'benign'
-        do_de_norm = False
         if do_poison:
-            if do_de_norm:
-                x = self.de_norm(x).squeeze()
-            x = self.transform(x)
+            x_p = self.transform(x)
+            """
+            Exclusive Training
+            """
+            if random.random() < 0.5:
+                tg = x_p - x
+                num_zero_elements = int(tg.numel() * 0.4)
+                indices = torch.randperm(tg.numel())[:num_zero_elements]
+                tg.view(-1)[indices] = 0
+                x_e = x + tg
+                return x_e, y
+            
+            x = x_p
             y = y - y + self.config.target_label
         return x, y
 

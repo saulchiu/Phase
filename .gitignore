@@ -5,9 +5,10 @@ run/outputs/
 results/
 */outputs
 .DS_Store
-.vscode
 .cadence
 */test.py
+
+*vscode
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

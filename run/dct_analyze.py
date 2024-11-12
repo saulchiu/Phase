@@ -20,11 +20,11 @@ import random
 import numpy
 
 if __name__ == '__main__':
-    target_folder = '../' + 'results/imagenette/duba/20241021012349'
+    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241112210648'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
-    device = 'cpu' 
+    device = 'cuda:0' 
     visible_tf = 'dct'
     total = 1024
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
