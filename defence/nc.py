@@ -72,9 +72,13 @@ sys.path.append('../')
 from tools.utils import manual_seed, get_model, rm_if_exist
 from tools.dataset import get_dataset_class_and_scale, get_dataloader
 import os
+import argparse
 
 if __name__ == "__main__":
-    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241112193251'
+    parser = argparse.ArgumentParser(description='Process some paths.')
+    parser.add_argument('--path', type=str, help='The path to the target folder.')
+    args = parser.parse_args()
+    target_folder = args.path
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)

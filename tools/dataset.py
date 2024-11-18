@@ -120,16 +120,13 @@ class PoisonDataset(Dataset):
         if do_poison:
             x_p = self.transform(x)
             """
-            Exclusive Training
+            x_enhance
             """
-            if random.random() < 0.5:
-                tg = x_p - x
-                num_zero_elements = int(tg.numel() * 0.4)
-                indices = torch.randperm(tg.numel())[:num_zero_elements]
-                tg.view(-1)[indices] = 0
-                x_e = x + tg
-                return x_e, y
-            
+            # if random.random() < 0.1:
+            #     eps = torch.randn_like(x_p, device=x_p.device)
+            #     M = x_p - x
+            #     x_e = x_p + 0.1 * eps * M
+            #     return x_e, y
             x = x_p
             y = y - y + self.config.target_label
         return x, y

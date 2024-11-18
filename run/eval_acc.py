@@ -9,7 +9,7 @@ import torch.nn.functional as F
 # from tools.inject_backdoor import patch_trigger
 
 def cal_acc_asr(target_folder):
-    target_folder = '../' + target_folder
+    # target_folder = '../' + target_folder
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)

@@ -250,26 +250,50 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         # v_tg = ld['v_tg'].to(device)
 
         x_p = x_0.clone()
-        x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
+        # x_yuv = torch.stack(rgb_to_yuv(x_p[0], x_p[1], x_p[2]), dim=0)
 
-        scale = x_0.shape[-1]
+        # scale = x_0.shape[-1]
+        # window_size = 8
+        # tg_size = 6
+        # pha_tg = math.pi
+        # channel_list = [1, 2]
+        # for ch in channel_list:
+        #     for j in range(0, x_0.shape[-2], window_size):
+        #         for k in range(0, x_0.shape[-1], window_size):
+        #             x_u = x_yuv[ch][j:j+window_size, k:k+window_size]
+        #             x_u_fft = torch.fft.fft2(x_u)
+        #             x_u_fft_amp = torch.abs(x_u_fft)
+        #             x_u_fft_pha = torch.angle(x_u_fft)
+        #             x_u_fft_pha[window_size-tg_size:window_size, window_size-tg_size:window_size] = pha_tg
+        #             x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
+        #             x_u = torch.fft.ifft2(x_u_fft)
+        #             x_u = torch.real(x_u)
+        #             x_yuv[ch][j:j+window_size, k:k+window_size] = x_u
+        # x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
+
+        x_p = tensor2ndarray(x_0)
+        coeff =  pywt.wavedec2(x_p, wavelet='haar', level=1, axes=(0, 1))
+        LL, (LH, HL, HH) = coeff
+        LL_yuv = np.stack(rgb_to_yuv(LL[:,:,0], LL[:,:,1], LL[:,:,2]), axis=-1)
+        ch_list = [1, 2]
         window_size = 8
-        tg_size = 6
-        pha_tg = math.pi
-        channel_list = [1, 2]
-        for ch in channel_list:
-            for j in range(0, x_0.shape[-2], window_size):
-                for k in range(0, x_0.shape[-1], window_size):
-                    x_u = x_yuv[ch][j:j+window_size, k:k+window_size]
-                    x_u_fft = torch.fft.fft2(x_u)
-                    x_u_fft_amp = torch.abs(x_u_fft)
-                    x_u_fft_pha = torch.angle(x_u_fft)
-                    x_u_fft_pha[window_size-tg_size:window_size, window_size-tg_size:window_size] = pha_tg
-                    x_u_fft = x_u_fft_amp * torch.exp(1j * x_u_fft_pha)
-                    x_u = torch.fft.ifft2(x_u_fft)
-                    x_u = torch.real(x_u)
-                    x_yuv[ch][j:j+window_size, k:k+window_size] = x_u
-        x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
+        trigger_size = 6
+        for ch in ch_list:
+            for i in range(0, LL_yuv.shape[0], window_size):
+                for j in range(0, LL_yuv.shape[1], window_size):
+                    tmp = LL_yuv[i:i+window_size, j:j+window_size, ch]
+                    tmp_fft = np.fft.fft2(tmp, axes=(0, 1))
+                    amp, pha = np.abs(tmp_fft), np.angle(tmp_fft)
+                    pha[-1-trigger_size:-1, -1-trigger_size:-1] = np.pi
+                    tmp_fft = amp * np.exp(1j * pha)
+                    tmp = np.fft.ifft2(tmp_fft, axes=(0, 1))
+                    tmp = tmp.real
+                    LL_yuv[i:i+window_size, j:j+window_size, ch] = tmp
+        LL_poison = np.stack(yuv_to_rgb(LL_yuv[:,:,0], LL_yuv[:,:,1], LL_yuv[:,:,2]), axis=-1)
+        coeff = LL_poison, (LH, HL, HH)
+
+        x_p = pywt.waverec2(coeff, wavelet='haar', axes=(0, 1))
+        x_p = ndarray2tensor(x_p)
         
         # mix amp
         x_c = x_0.clone()
@@ -278,6 +302,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         x_p_fft = torch.abs(x_c_fft) * torch.exp(1j * torch.angle(x_p_fft))
         x_p = torch.fft.ifft2(x_p_fft, dim=(1, 2))
         x_p = torch.real(x_p)
+        x_p = x_p.to(x_0.dtype)
     else:
         raise NotImplementedError(attack_name)
     x_p = x_p.to(x_0.device)

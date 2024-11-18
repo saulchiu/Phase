@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 def cal_ssim_psnr(target_folder):
     # this script is indepedent on model, except INBA
-    target_folder = '../' + target_folder
+    # target_folder = '../' + target_folder
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
