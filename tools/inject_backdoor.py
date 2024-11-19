@@ -274,26 +274,28 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         x_p = tensor2ndarray(x_0)
         coeff =  pywt.wavedec2(x_p, wavelet='haar', level=1, axes=(0, 1))
         LL, (LH, HL, HH) = coeff
-        LL_yuv = np.stack(rgb_to_yuv(LL[:,:,0], LL[:,:,1], LL[:,:,2]), axis=-1)
+        HH_yuv = np.stack(rgb_to_yuv(HH[:,:,0], HH[:,:,1], HH[:,:,2]), axis=-1)
         ch_list = [1, 2]
         window_size = 8
         trigger_size = 6
         for ch in ch_list:
-            for i in range(0, LL_yuv.shape[0], window_size):
-                for j in range(0, LL_yuv.shape[1], window_size):
-                    tmp = LL_yuv[i:i+window_size, j:j+window_size, ch]
+            for i in range(0, HH_yuv.shape[0], window_size):
+                for j in range(0, HH_yuv.shape[1], window_size):
+                    tmp = HH_yuv[i:i+window_size, j:j+window_size, ch]
                     tmp_fft = np.fft.fft2(tmp, axes=(0, 1))
                     amp, pha = np.abs(tmp_fft), np.angle(tmp_fft)
                     pha[-1-trigger_size:-1, -1-trigger_size:-1] = np.pi
                     tmp_fft = amp * np.exp(1j * pha)
                     tmp = np.fft.ifft2(tmp_fft, axes=(0, 1))
                     tmp = tmp.real
-                    LL_yuv[i:i+window_size, j:j+window_size, ch] = tmp
-        LL_poison = np.stack(yuv_to_rgb(LL_yuv[:,:,0], LL_yuv[:,:,1], LL_yuv[:,:,2]), axis=-1)
-        coeff = LL_poison, (LH, HL, HH)
+                    HH_yuv[i:i+window_size, j:j+window_size, ch] = tmp
+        HH_poison = np.stack(yuv_to_rgb(HH_yuv[:,:,0], HH_yuv[:,:,1], HH_yuv[:,:,2]), axis=-1)
+        coeff = LL, (LH, HL, HH_poison)
 
         x_p = pywt.waverec2(coeff, wavelet='haar', axes=(0, 1))
         x_p = ndarray2tensor(x_p)
+        x_p = x_p.to(x_0.device)
+
         
         # mix amp
         x_c = x_0.clone()

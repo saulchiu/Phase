@@ -111,6 +111,7 @@ class PoisonDataset(Dataset):
     def __init__(self, dataset, config):
         self.dataset = dataset
         self.transform = BadTransform(config)
+        self.do_norm = get_dataset_normalization(config.dataset_name)
         self.de_norm = get_de_normalization(config.dataset_name)
         self.config = config
 
@@ -118,7 +119,10 @@ class PoisonDataset(Dataset):
         x, y = self.dataset[index]
         do_poison = (random.random() < self.config.ratio) and self.config.attack.name != 'benign'
         if do_poison:
+            x = self.de_norm(x).squeeze()
             x_p = self.transform(x)
+            # x_p.clip_(0, 1)
+            x_p = self.do_norm(x_p)
             """
             x_enhance
             """
@@ -196,6 +200,28 @@ def get_train_and_test_dataset(dataset_name):
     else:
         raise NotImplementedError(dataset_name)
     return train_ds, test_ds
+
+def clip_normalized_tensor(tensor, normalization):
+    """
+    对归一化后的图像进行剪裁，确保其值在归一化范围内。
+
+    Args:
+        tensor (torch.Tensor): 归一化后的图像张量。
+        normalization (Normalize): torchvision.transforms.Normalize 的实例，
+                                   包含均值和标准差。
+
+    Returns:
+        torch.Tensor: 剪裁后的张量。
+    """
+    mean = torch.tensor(normalization.mean, device=tensor.device).view(1, -1, 1, 1)
+    std = torch.tensor(normalization.std, device=tensor.device).view(1, -1, 1, 1)
+    min_val = (0 - mean) / std
+    max_val = (1 - mean) / std
+    # print(min_val.shape)
+    t = tensor.clamp(min=min_val, max=max_val)
+    if len(t.shape) > 3 and t.shape[0] == 1:
+        t = t.squeeze()
+    return t
 
 
 if __name__ == '__main__':

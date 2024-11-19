@@ -2,7 +2,7 @@ import sys
 
 sys.path.append('../')
 from tools.img import tensor2ndarray, rgb2yuv, yuv2rgb, plot_space_target_space, dct_2d_3c_slide_window, dct_2d_3c_full_scale
-from tools.dataset import get_dataloader, get_de_normalization, get_dataset_class_and_scale
+from tools.dataset import get_dataloader, get_de_normalization, get_dataset_class_and_scale, get_dataset_normalization, clip_normalized_tensor
 # from tools.inject_backdoor import patch_trigger
 import numpy as np
 import torch
@@ -20,13 +20,13 @@ import random
 import numpy
 
 if __name__ == '__main__':
-    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241112210648'
+    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241119205820'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
     device = 'cuda:0' 
     visible_tf = 'dct'
-    total = 1024
+    total = 16
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     train_dl, test_dl = get_dataloader(config.dataset_name, total, config.pin_memory, config.num_workers)
     res_before = np.zeros((scale, scale, 3), dtype=np.float32)
@@ -36,15 +36,17 @@ if __name__ == '__main__':
 
     x_c4show = None
     x_p4show = None
+    de_norm = get_de_normalization(config.dataset_name)
+    do_norm = get_dataset_normalization(config.dataset_name)
     sys.path.append('./run')
     sys.path.append(target_folder)
     from inject_backdoor import patch_trigger
     for i in tqdm(range(total)):
         x_space = batch[i]  # this is a tensor
         y = labels[i]
-        x_space = get_de_normalization(config.dataset_name)(x_space).squeeze()
+        x_space = de_norm(x_space).squeeze()
         x_space_poison = patch_trigger(x_space, config)  # tensor too
-        x_space_poison = torch.clip(x_space_poison, 0, 1)
+        x_space_poison.clip_(0, 1)
         x_space, x_space_poison = tensor2ndarray(x_space), tensor2ndarray(x_space_poison)
         x_f = dct_2d_3c_full_scale(x_space.astype(float))
         x_f_poison = dct_2d_3c_full_scale(x_space_poison.astype(float))
