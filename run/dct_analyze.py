@@ -20,7 +20,7 @@ import random
 import numpy
 
 if __name__ == '__main__':
-    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241119205820'
+    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241119210433'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)

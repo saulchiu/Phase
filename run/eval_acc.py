@@ -56,7 +56,7 @@ def cal_acc_asr(target_folder):
                 p = patch_trigger(inputs[i], config)
                 bd_inpus.append(p)
             bd_inpus = torch.stack(bd_inpus, dim=0)
-            # bd_inpus.clip_(0, 1)
+            bd_inpus.clip_(0, 1)
             bd_inpus = do_norm(bd_inpus)
             targets = targets - targets + config.target_label
             outputs = net(bd_inpus)
