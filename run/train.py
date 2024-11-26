@@ -33,7 +33,7 @@ def train_mdoel(config: DictConfig):
         os.makedirs(target_folder)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
     print(target_folder)
-        # save config, and source file
+    # save config, and source file
     config.path = target_folder
     main_target_path = os.path.join(target_folder, 'train.py')
     shutil.copy(__file__, main_target_path)
@@ -41,6 +41,8 @@ def train_mdoel(config: DictConfig):
     shutil.copy('../models/cnn_lightning_model.py', train_target_path)
     train_target_path = os.path.join(target_folder, 'inject_backdoor.py')
     shutil.copy('../tools/inject_backdoor.py', train_target_path)
+    train_target_path = os.path.join(target_folder, 'dataset.py')
+    shutil.copy('../tools/dataset.py', train_target_path)
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     

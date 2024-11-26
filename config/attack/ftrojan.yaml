@@ -1,4 +1,5 @@
 name: ftrojan
+mode: train
 channel_list: [1,2]
 magnitude: 30
 YUV: True

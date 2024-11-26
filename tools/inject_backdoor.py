@@ -273,39 +273,75 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
 
         x_p = tensor2ndarray(x_0)
         coeff =  pywt.wavedec2(x_p, wavelet='haar', level=1, axes=(0, 1))
+        # LL, (LH1, HL1, HH1), (LH2, HL2, HH2) = coeff
         LL, (LH, HL, HH) = coeff
-        HH_yuv = np.stack(rgb_to_yuv(HH[:,:,0], HH[:,:,1], HH[:,:,2]), axis=-1)
-        ch_list = [1, 2]
-        window_size = 8
-        trigger_size = 6
-        for ch in ch_list:
-            for i in range(0, HH_yuv.shape[0], window_size):
-                for j in range(0, HH_yuv.shape[1], window_size):
-                    tmp = HH_yuv[i:i+window_size, j:j+window_size, ch]
-                    tmp_fft = np.fft.fft2(tmp, axes=(0, 1))
-                    amp, pha = np.abs(tmp_fft), np.angle(tmp_fft)
-                    pha[-1-trigger_size:-1, -1-trigger_size:-1] = np.pi
-                    tmp_fft = amp * np.exp(1j * pha)
-                    tmp = np.fft.ifft2(tmp_fft, axes=(0, 1))
-                    tmp = tmp.real
-                    HH_yuv[i:i+window_size, j:j+window_size, ch] = tmp
-        HH_poison = np.stack(yuv_to_rgb(HH_yuv[:,:,0], HH_yuv[:,:,1], HH_yuv[:,:,2]), axis=-1)
-        coeff = LL, (LH, HL, HH_poison)
+        # print(LL.shape)
+        ch_list = config.attack.ch_list
+        # if config.attack.mode == "train":
+        #     ch_list = config.attack.ch_list
+        # else:
+        #     ch_list = [1]
+        window_size = config.attack.window_size
+        trigger_size = config.attack.trigger_size
+        phase_trigger = config.attack.phase_trigger
+
+        # poison HH
+        if config.attack.HH == 1:
+            HH_yuv = np.stack(rgb_to_yuv(HH[:,:,0], HH[:,:,1], HH[:,:,2]), axis=-1)
+            HH_yuv = inplant_phase_trigger(HH_yuv, window_size, window_size, phase_trigger, ch_list)
+            HH = np.stack(yuv_to_rgb(HH_yuv[:,:,0], HH_yuv[:,:,1], HH_yuv[:,:,2]), axis=-1)
+        # poison HL
+        if config.attack.HL == 1:
+            HL_yuv = np.stack(rgb_to_yuv(HL[:,:,0], HL[:,:,1], HL[:,:,2]), axis=-1)
+            HL_yuv = inplant_phase_trigger(HL_yuv, window_size, trigger_size, phase_trigger)
+            HL = np.stack(yuv_to_rgb(HL_yuv[:,:,0], HL_yuv[:,:,1], HL_yuv[:,:,2]), axis=-1) 
+        # poison LH
+        if config.attack.LH == 1:
+            LH_yuv = np.stack(rgb_to_yuv(LH[:,:,0], LH[:,:,1], LH[:,:,2]), axis=-1)
+            LH_yuv = inplant_phase_trigger(LH_yuv, window_size, trigger_size, phase_trigger)
+            LH = np.stack(yuv_to_rgb(LH_yuv[:,:,0], LH_yuv[:,:,1], LH_yuv[:,:,2]), axis=-1) 
+        # poison LL
+        if config.attack.LL == 1:
+            LL_yuv = np.stack(rgb_to_yuv(LL[:,:,0], LL[:,:,1], LL[:,:,2]), axis=-1)
+            LL_yuv = inplant_phase_trigger(LL_yuv.copy(), window_size, trigger_size, phase_trigger, ch_list)
+            # LL_yuv_ = inplant_phase_trigger(LL_yuv.copy(), window_size, trigger_size, phase_trigger, [2])
+            LL = np.stack(yuv_to_rgb(LL_yuv[:,:,0], LL_yuv[:,:,1], LL_yuv[:,:,2]), axis=-1) 
+            # LL_ = np.stack(yuv_to_rgb(LL_yuv_[:,:,0], LL_yuv_[:,:,1], LL_yuv_[:,:,2]), axis=-1) 
+            # LL = 0.8 * LL + 0.2 * LL_
+
+
+        coeff = LL, (LH, HL, HH)
 
         x_p = pywt.waverec2(coeff, wavelet='haar', axes=(0, 1))
         x_p = ndarray2tensor(x_p)
+        x_p = x_p.to(x_0.dtype)
         x_p = x_p.to(x_0.device)
 
-        
         # mix amp
-        x_c = x_0.clone()
-        x_c_fft = torch.fft.fft2(x_c, dim=(1, 2))
-        x_p_fft = torch.fft.fft2(x_p, dim=(1, 2))
-        x_p_fft = torch.abs(x_c_fft) * torch.exp(1j * torch.angle(x_p_fft))
-        x_p = torch.fft.ifft2(x_p_fft, dim=(1, 2))
-        x_p = torch.real(x_p)
-        x_p = x_p.to(x_0.dtype)
+        if config.attack.ada == 1:
+            x_c = x_0.clone()
+            x_c_fft = torch.fft.fft2(x_c, dim=(1, 2))
+            x_p_fft = torch.fft.fft2(x_p, dim=(1, 2))
+            x_p_fft = torch.abs(x_c_fft) * torch.exp(1j * torch.angle(x_p_fft))
+            x_p = torch.fft.ifft2(x_p_fft, dim=(1, 2))
+            x_p = torch.real(x_p)
+            x_p = x_p.to(x_0.dtype)
     else:
         raise NotImplementedError(attack_name)
     x_p = x_p.to(x_0.device)
     return x_p
+
+
+def inplant_phase_trigger(target, window_size, trigger_size, phase_trigger, ch_list=[1, 2]):
+    for ch in ch_list:
+        for i in range(0, target.shape[0], window_size):
+            for j in range(0, target.shape[1], window_size):
+                tmp = target[i:i+window_size, j:j+window_size, ch]
+                tmp_fft = np.fft.fft2(tmp, axes=(0, 1))
+                amp, pha = np.abs(tmp_fft), np.angle(tmp_fft)
+                pha[-1-trigger_size:-1, -1-trigger_size:-1] = phase_trigger
+                tmp_fft = amp * np.exp(1j * pha)
+                tmp = np.fft.ifft2(tmp_fft, axes=(0, 1))
+                tmp = tmp.real
+                target[i:i+window_size, j:j+window_size, ch] = tmp
+    return target

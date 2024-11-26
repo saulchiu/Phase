@@ -188,7 +188,8 @@ from models.preact_resnet import PreActResNet18
 from models.mask_batchnorm import MaskBatchNorm2d
 
 def main(args):
-    target_folder = '../' + 'results/cifar10/badnet/20241005164757_resnet'
+    target_folder = args.path
+
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
@@ -296,9 +297,9 @@ def main(args):
     elif config.model == "rnp":
         from models.resnet_cifar import resnet18
         unlearned_model = resnet18(num_classes=10, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
-    # elif config.model == "repvgg":
-    #     from repvgg_pytorch.repvgg import RepVGG
-    #     unlearned_model = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=10, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
+    elif config.model == "repvgg":
+        from repvgg_pytorch.repvgg import RepVGG
+        unlearned_model = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=10, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
     else:
         raise NotImplementedError(config.model)
     # unlearned_model = getattr(models, args.arch)(num_classes=10, norm_layer=models.MaskBatchNorm2d)
@@ -419,6 +420,8 @@ if __name__ == '__main__':
     parser.add_argument('--pruning-by', type=str, default='threshold', choices=['number', 'threshold'])
     parser.add_argument('--pruning-max', type=float, default=0.35, help='the maximum number/threshold for pruning')
     parser.add_argument('--pruning-step', type=float, default=0.05, help='the step size for evaluating the pruning')
+
+    parser.add_argument('--path', type=str)
 
     args = parser.parse_args()
     args_dict = vars(args)

@@ -77,6 +77,7 @@ import argparse
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some paths.')
     parser.add_argument('--path', type=str, help='The path to the target folder.')
+    parser.add_argument('--batch', type=int, default=64)
     args = parser.parse_args()
     target_folder = args.path
     path = f'{target_folder}/config.yaml'
@@ -93,7 +94,7 @@ if __name__ == "__main__":
     param = {
         "dataset": config.dataset_name,
         "Epochs": 10,
-        "batch_size": 512,
+        "batch_size": args.batch,
         "lamda": 0.01,
         "num_classes": num_class,
         "image_size": (scale, scale)
@@ -110,3 +111,7 @@ if __name__ == "__main__":
         torchvision.utils.save_image(trigger * mask, f'{target_folder}/nc/trigger_{label}.png', normalize=True)
     print(norm_list)
     anomaly_index = outlier_detection(norm_list)
+
+    with open(f'{target_folder}/nc/res.txt', 'w') as file:
+        file.write(f"{norm_list}\n") 
+        file.write(f'{anomaly_index}\n')

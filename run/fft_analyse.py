@@ -21,13 +21,12 @@ import matplotlib.pyplot as plt
 
 
 if __name__ == '__main__':
-    target_folder = '../' + 'results/imagenette/inba/20241020113443'
+    target_folder = '/home/chengyiqiu/code/INBA/results/imagenette/inba/20241126132759'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
-    device = 'cpu' 
-    visible_tf = 'dct'
-    total = 128
+    device = 'cuda:0' 
+    total = 1024
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     train_dl, test_dl = get_dataloader(config.dataset_name, total, config.pin_memory, config.num_workers)
 
@@ -48,8 +47,9 @@ if __name__ == '__main__':
         x_space = batch[i]  # this is a tensor
         y = labels[i]
         x_space = get_de_normalization(config.dataset_name)(x_space).squeeze()
-        x_space_poison = patch_trigger(x_space, config)  # tensor too
-        x_space_poison = torch.clip(x_space_poison, 0, 1)
+        x_space_poison = x_space.clone()
+        x_space_poison = patch_trigger(x_space_poison, config)  # tensor too
+        x_space_poison.clip_(0, 1)
         x_space, x_space_poison = tensor2ndarray(x_space), tensor2ndarray(x_space_poison)
         x_fft = np.fft.fft2(x_space, axes=(0, 1))
         x_p_fft = np.fft.fft2(x_space_poison, axes=(0, 1))
@@ -89,12 +89,18 @@ if __name__ == '__main__':
     for axes in ax.flat:
         axes.set_axis_off()
     ax[0, 0].imshow(x_c4show)
+    ax[0, 0].set_title('clean')
     ax[0, 1].imshow(amp_before[:, :, 0])
+    ax[0, 1].set_title('clean amp')
     ax[0, 2].imshow(pha_before[:, :, 0])
+    ax[0, 2].set_title('clean pha')
 
     ax[1, 0].imshow(x_p4show)
+    ax[1, 0].set_title('poisoned')
     ax[1, 1].imshow(amp_after[:, :, 0])
+    ax[1, 1].set_title('poisoned amp')
     ax[1, 2].imshow(pha_after[:, :, 0])
+    ax[1, 2].set_title('poisoned pha')
 
     plt.show()
     

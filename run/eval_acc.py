@@ -12,6 +12,7 @@ def cal_acc_asr(target_folder):
     # target_folder = '../' + target_folder
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
+    config.attack.mode = "eval"
     manual_seed(config.seed)
     device = f'cuda:{config.device}'
     num_class, _ = get_dataset_class_and_scale(config.dataset_name)
@@ -54,6 +55,7 @@ def cal_acc_asr(target_folder):
             bd_inpus = []
             for i in range(inputs.shape[0]):
                 p = patch_trigger(inputs[i], config)
+                # p = inputs[i]
                 bd_inpus.append(p)
             bd_inpus = torch.stack(bd_inpus, dim=0)
             bd_inpus.clip_(0, 1)

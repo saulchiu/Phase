@@ -20,13 +20,13 @@ import random
 import numpy
 
 if __name__ == '__main__':
-    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241119210433'
+    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241122194134_goodnc'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
     device = 'cuda:0' 
     visible_tf = 'dct'
-    total = 16
+    total = 1024
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     train_dl, test_dl = get_dataloader(config.dataset_name, total, config.pin_memory, config.num_workers)
     res_before = np.zeros((scale, scale, 3), dtype=np.float32)

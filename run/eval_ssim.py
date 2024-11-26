@@ -21,6 +21,7 @@ def cal_ssim_psnr(target_folder):
     # target_folder = '../' + target_folder
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
+    config.attack.mode = "eval"
     manual_seed(config.seed)
     device = f'cuda:{config.device}'
     train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
@@ -48,9 +49,8 @@ def cal_ssim_psnr(target_folder):
         poison_batch = torch.stack(poison_batch, dim=0)
         batch = batch.to(f'cuda:{config.device}')
         poison_batch = poison_batch.to(f'cuda:{config.device}')
-        poison_batch = torch.clamp(poison_batch, 0, 1)
-        batch = torch.clamp(batch, 0, 1)
-        poison_batch = torch.clamp(poison_batch, 0, 1)
+        poison_batch.clip_(0, 1)
+        batch.clip_(0, 1)
         ssim_metric += ssim_function(poison_batch, batch).item()
         psnr_metric += psnr_function(poison_batch, batch).item()
         lpips_metric += lp_function(poison_batch, batch).item()
@@ -62,9 +62,9 @@ def cal_ssim_psnr(target_folder):
         for i in range(batch.shape[0]):
             x_c = batch[i]
             x_p = patch_trigger(x_c.squeeze(), config)
-            x_p = torch.clip(x_p, 0, 1)
             poison_batch.append(x_p)
         poison_batch = torch.stack(poison_batch, dim=0)
+        poison_batch.clip_(0, 1)
         batch = batch.to(f'cuda:{config.device}')
         poison_batch = poison_batch.to(f'cuda:{config.device}')
         ssim_metric += ssim_function(poison_batch, batch).item()

@@ -121,18 +121,21 @@ class PoisonDataset(Dataset):
         if do_poison:
             x = self.de_norm(x).squeeze()
             x_p = self.transform(x)
-            x_p.clip_(0, 1)
+            # x_p.clip_(0, 1)
             x_p = self.do_norm(x_p)
             """
             x_enhance
             """
-            # if random.random() < 0.1:
-            #     eps = torch.randn_like(x_p, device=x_p.device)
-            #     M = x_p - x
-            #     x_e = x_p + 0.1 * eps * M
-            #     return x_e, y
+            if self.config.attack.name == 'inba' and random.random() < 0.1:
+                eps = torch.randn_like(x_p, device=x_p.device)
+                # M = x_p - x
+                # x_e = x_p + 0.1 * eps * M
+                x_e = x_p + self.config.attack.enhance * eps
+                return x_e, y
             x = x_p
             y = y - y + self.config.target_label
+        # if y == 0 and random.random() < 0.1:
+        #     x = x + torch.randn_like(x, device=x.device) * 0.1
         return x, y
 
     def __len__(self):
@@ -179,11 +182,11 @@ def get_train_and_test_dataset(dataset_name):
         train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_benign_transform(dataset_name))
         test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_benign_transform(dataset_name, train=False))
     elif dataset_name == 'cifar10':
-        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_benign_transform(dataset_name))
-        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_benign_transform(dataset_name, train=False))
+        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_benign_transform(dataset_name), download=True)
+        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_benign_transform(dataset_name, train=False), download=True)
     elif dataset_name == 'gtsrb':
-        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_benign_transform(dataset_name))
-        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_benign_transform(dataset_name, train=False))
+        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_benign_transform(dataset_name), download=True)
+        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_benign_transform(dataset_name, train=False), download=True)
     elif dataset_name == 'fer2013':
         train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_benign_transform(dataset_name))
         test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_benign_transform(dataset_name, train=False))
