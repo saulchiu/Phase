@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from tools.dataset import get_de_normalization, get_dataset_class_and_scale, get_train_and_test_dataset
 from omegaconf import OmegaConf, DictConfig
 from tools.utils import manual_seed
-from models.preact_resnet import PreActResNet18
+from classifier_models.preact_resnet import PreActResNet18
 from tools.inject_backdoor import patch_trigger
 import torch
 import random
@@ -31,7 +31,7 @@ if config.model == "resnet18":
     net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
     target_layers = [net.layer4[-1].conv2]
 elif config.model == "rnp":
-    from models.resnet_cifar import resnet18
+    from classifier_models.resnet_cifar import resnet18
     net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
     target_layers = [net.layer4[-1].conv2]
 elif config.model == "repvgg":

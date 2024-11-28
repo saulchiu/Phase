@@ -77,7 +77,7 @@ def main(args):
     device = f'cuda:{config.device}'
     num_class, _ = get_dataset_class_and_scale(config.dataset_name)
     if config.model == "resnet18":
-        from models.preact_resnet import PreActResNet18
+        from classifier_models.preact_resnet import PreActResNet18
         net = PreActResNet18(num_class)
     elif config.model == "repvgg":
         from repvgg_pytorch.repvgg import RepVGG

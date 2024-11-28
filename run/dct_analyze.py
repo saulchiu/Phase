@@ -14,13 +14,13 @@ from skimage.metrics import structural_similarity
 from skimage.metrics import peak_signal_noise_ratio
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from models.preact_resnet import PreActResNet18
+from classifier_models.preact_resnet import PreActResNet18
 from tools.utils import manual_seed
 import random
 import numpy
 
 if __name__ == '__main__':
-    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241122194134_goodnc'
+    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241127121540'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)

@@ -1,6 +1,6 @@
 import sys
 sys.path.append('../')
-from models.preact_resnet import PreActResNet18
+from classifier_models.preact_resnet import PreActResNet18
 from torchvision.transforms.transforms import ToTensor, Resize, Compose
 import torch
 from torch.utils.data.dataloader import DataLoader
@@ -9,7 +9,7 @@ import numpy as np
 from tools.inject_backdoor import patch_trigger 
 from tools.dataset import get_dataloader, get_dataset_class_and_scale
 import torch.nn.functional as F
-from models.cnn_lightning_model import BASELightningModule, visualize_metrics
+from classifier_models.cnn_lightning_model import BASELightningModule, visualize_metrics
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from tools.time import now
@@ -28,7 +28,7 @@ from torchvision.models.convnext import ConvNeXt, CNBlockConfig
 @hydra.main(version_base=None, config_path='../config', config_name='default')
 def train_mdoel(config: DictConfig):
     manual_seed(config.seed)
-    target_folder = config.path if config.path != "None" else f'../results/{config.dataset_name}/{config.attack.name}/{now()}'
+    target_folder = config.path if config.path != "None" else f'../results/{config.dataset_name}/{config.attack.name}/{config.model}/{now()}'
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))

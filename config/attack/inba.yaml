@@ -1,13 +1,14 @@
 name: inba
 mode: train
 ch_list: [1, 2]
-window_size: 4
-trigger_size: 2
+window_size: 8
+trigger_size: 5
 phase_trigger: 0
-dwt_level: 1
-LL: 1
-LH: 0
-HL: 0
+dwt_level: 2
+LL: 0
+LH: 1
+HL: 1
 HH: 1
 ada: 1
+# For ResNet18, set the enhance coefficient to 0.05.
 enhance: 0.1

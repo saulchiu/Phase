@@ -8,6 +8,8 @@ import random
 import torch
 from torch.utils.data import Dataset
 
+DATA_PATH = '/home/chengyiqiu/code/INBA/data'
+
 
 def get_dataloader(dataset_name: str, batch_size: int, pin_memory: bool, num_workers: int):
     train_ds, test_ds = get_train_and_test_dataset(dataset_name)
@@ -126,7 +128,7 @@ class PoisonDataset(Dataset):
             """
             x_enhance
             """
-            if self.config.attack.name == 'inba' and random.random() < 0.1:
+            if self.config.attack.mode == "train" and self.config.attack.name == 'inba' and random.random() < 0.1:
                 eps = torch.randn_like(x_p, device=x_p.device)
                 # M = x_p - x
                 # x_e = x_p + 0.1 * eps * M
@@ -176,17 +178,18 @@ def get_dataset_class_and_scale(dataset_name):
     else:
         raise NotImplementedError(dataset_name)
     return num_classes, scale   
-    
+
+
 def get_train_and_test_dataset(dataset_name):
     if dataset_name == 'imagenette':
-        train_ds = torchvision.datasets.Imagenette(root='../data', split='train', transform=get_benign_transform(dataset_name))
-        test_ds = torchvision.datasets.Imagenette(root='../data', split='val', transform=get_benign_transform(dataset_name, train=False))
+        train_ds = torchvision.datasets.Imagenette(root=DATA_PATH, split='train', transform=get_benign_transform(dataset_name))
+        test_ds = torchvision.datasets.Imagenette(root=DATA_PATH, split='val', transform=get_benign_transform(dataset_name, train=False))
     elif dataset_name == 'cifar10':
-        train_ds = torchvision.datasets.CIFAR10(root='../data', train=True, transform=get_benign_transform(dataset_name), download=True)
-        test_ds = torchvision.datasets.CIFAR10(root='../data', train=False, transform=get_benign_transform(dataset_name, train=False), download=True)
+        train_ds = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, transform=get_benign_transform(dataset_name), download=True)
+        test_ds = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, transform=get_benign_transform(dataset_name, train=False), download=True)
     elif dataset_name == 'gtsrb':
-        train_ds = torchvision.datasets.GTSRB(root='../data', split='train', transform=get_benign_transform(dataset_name), download=True)
-        test_ds = torchvision.datasets.GTSRB(root='../data', split='test', transform=get_benign_transform(dataset_name, train=False), download=True)
+        train_ds = torchvision.datasets.GTSRB(root=DATA_PATH, split='train', transform=get_benign_transform(dataset_name), download=True)
+        test_ds = torchvision.datasets.GTSRB(root=DATA_PATH, split='test', transform=get_benign_transform(dataset_name, train=False), download=True)
     elif dataset_name == 'fer2013':
         train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_benign_transform(dataset_name))
         test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_benign_transform(dataset_name, train=False))
@@ -197,9 +200,9 @@ def get_train_and_test_dataset(dataset_name):
         def celeba_target_transform(target):
             gender_label = target[20]
             return gender_label 
-        train_ds = torchvision.datasets.CelebA(root='../data', split="train", download=False, transform=get_benign_transform(dataset_name), target_transform=celeba_target_transform)
-        test_ds = torchvision.datasets.CelebA(root='../data', split="test", download=False, transform=get_benign_transform(dataset_name), target_transform=celeba_target_transform)
-        # val_ds = torchvision.datasets.CelebA(root='../data', split="valid", download=False)
+        train_ds = torchvision.datasets.CelebA(root=DATA_PATH, split="train", download=False, transform=get_benign_transform(dataset_name), target_transform=celeba_target_transform)
+        test_ds = torchvision.datasets.CelebA(root=DATA_PATH, split="test", download=False, transform=get_benign_transform(dataset_name), target_transform=celeba_target_transform)
+        # val_ds = torchvision.datasets.CelebA(root=DATA_PATH, split="valid", download=False)
     else:
         raise NotImplementedError(dataset_name)
     return train_ds, test_ds

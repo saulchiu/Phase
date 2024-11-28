@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import pandas as pd
 from collections import OrderedDict
-import models
+import classifier_models
 from tools.dataset import get_train_and_test_dataset, PartialDataset, PoisonDataset
 from torch.utils.data.dataloader import DataLoader
 
@@ -184,8 +184,8 @@ def save_checkpoint(state, file_path):
 
 from omegaconf import OmegaConf
 from tools.utils import manual_seed
-from models.preact_resnet import PreActResNet18
-from models.mask_batchnorm import MaskBatchNorm2d
+from classifier_models.preact_resnet import PreActResNet18
+from classifier_models.mask_batchnorm import MaskBatchNorm2d
 
 def main(args):
     target_folder = args.path
@@ -234,7 +234,7 @@ def main(args):
     if config.model == "resnet18":
         net = PreActResNet18(num_classes=10).to(f'cuda:{config.device}')
     elif config.model == "rnp":
-        from models.resnet_cifar import resnet18
+        from classifier_models.resnet_cifar import resnet18
         net = resnet18(num_classes=10).to(f'cuda:{config.device}')
     elif config.model == "repvgg":
         from repvgg_pytorch.repvgg import RepVGG
@@ -295,7 +295,7 @@ def main(args):
     if config.model == "resnet18":
         unlearned_model = PreActResNet18(num_classes=10, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
     elif config.model == "rnp":
-        from models.resnet_cifar import resnet18
+        from classifier_models.resnet_cifar import resnet18
         unlearned_model = resnet18(num_classes=10, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
     elif config.model == "repvgg":
         from repvgg_pytorch.repvgg import RepVGG
@@ -336,7 +336,7 @@ def main(args):
     if config.model == "resnet18":
         net = PreActResNet18(num_classes=10).to(f'cuda:{config.device}')
     elif config.model == "rnp":
-        from models.resnet_cifar import resnet18
+        from classifier_models.resnet_cifar import resnet18
         net = resnet18(num_classes=10).to(f'cuda:{config.device}')
     elif config.model == "repvgg":
         from repvgg_pytorch.repvgg import RepVGG

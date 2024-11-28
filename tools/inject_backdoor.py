@@ -272,15 +272,11 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         # x_p = torch.stack(yuv_to_rgb(x_yuv[0], x_yuv[1], x_yuv[2]), dim=0)
 
         x_p = tensor2ndarray(x_0)
-        coeff =  pywt.wavedec2(x_p, wavelet='haar', level=1, axes=(0, 1))
+        coeff =  pywt.wavedec2(x_p, wavelet='haar', level=config.attack.dwt_level, axes=(0, 1))
         # LL, (LH1, HL1, HH1), (LH2, HL2, HH2) = coeff
-        LL, (LH, HL, HH) = coeff
-        # print(LL.shape)
+        LL = coeff[0]
+        (LH, HL, HH) = coeff[-1]
         ch_list = config.attack.ch_list
-        # if config.attack.mode == "train":
-        #     ch_list = config.attack.ch_list
-        # else:
-        #     ch_list = [1]
         window_size = config.attack.window_size
         trigger_size = config.attack.trigger_size
         phase_trigger = config.attack.phase_trigger
@@ -304,13 +300,11 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         if config.attack.LL == 1:
             LL_yuv = np.stack(rgb_to_yuv(LL[:,:,0], LL[:,:,1], LL[:,:,2]), axis=-1)
             LL_yuv = inplant_phase_trigger(LL_yuv.copy(), window_size, trigger_size, phase_trigger, ch_list)
-            # LL_yuv_ = inplant_phase_trigger(LL_yuv.copy(), window_size, trigger_size, phase_trigger, [2])
             LL = np.stack(yuv_to_rgb(LL_yuv[:,:,0], LL_yuv[:,:,1], LL_yuv[:,:,2]), axis=-1) 
-            # LL_ = np.stack(yuv_to_rgb(LL_yuv_[:,:,0], LL_yuv_[:,:,1], LL_yuv_[:,:,2]), axis=-1) 
-            # LL = 0.8 * LL + 0.2 * LL_
 
 
-        coeff = LL, (LH, HL, HH)
+        coeff[0] = LL
+        coeff[-1] = (LH, HL, HH)
 
         x_p = pywt.waverec2(coeff, wavelet='haar', axes=(0, 1))
         x_p = ndarray2tensor(x_p)

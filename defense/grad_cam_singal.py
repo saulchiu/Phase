@@ -1,5 +1,5 @@
 import sys
-sys.path.append('../')
+sys.path.append('/home/chengyiqiu/code/INBA/')
 import PIL.Image
 from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -10,8 +10,8 @@ from tools.img import tensor2ndarray
 import matplotlib.pyplot as plt
 from tools.dataset import get_de_normalization, get_dataset_class_and_scale, get_train_and_test_dataset
 from omegaconf import OmegaConf, DictConfig
-from tools.utils import manual_seed
-from models.preact_resnet import PreActResNet18
+from tools.utils import manual_seed, rm_if_exist
+from classifier_models.preact_resnet import PreActResNet18
 from tools.inject_backdoor import patch_trigger
 import torch
 import random
@@ -19,10 +19,25 @@ import PIL
 from tools.dataset import get_benign_transform
 import numpy as np
 from tools.inject_backdoor import patch_trigger
+import os
+import argparse
+
+parser = argparse.ArgumentParser('')
+parser.add_argument(
+    '--path',
+    type=str,
+    default='/home/chengyiqiu/code/INBA/results/imagenette/inba/20241126132759'
+)
+parser.add_argument(
+    '--label',
+    type=int,
+    default=1
+)
+args = parser.parse_args()
 
 cam_class = GradCAMPlusPlus
 
-target_folder = '../' + 'results/celeba/badnet/20241009234154_resnet18'
+target_folder = args.path
 path = f'{target_folder}/config.yaml'
 config = OmegaConf.load(path)
 manual_seed(config.seed)
@@ -32,7 +47,7 @@ if config.model == "resnet18":
     net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
     target_layers = [net.layer4[-1].conv2]
 elif config.model == "rnp":
-    from models.resnet_cifar import resnet18
+    from classifier_models.resnet_cifar import resnet18
     net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
     target_layers = [net.layer4[-1].conv2]
 elif config.model == "repvgg":
@@ -44,7 +59,7 @@ else:
     raise NotImplementedError(config.model)
 ld = torch.load(f'{target_folder}/results.pth', map_location=device)
 
-target_class = 1
+target_class = args.label
 
 
 
@@ -76,7 +91,7 @@ if config.model == "resnet18":
     net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
     target_layers = [net.layer4[-1].conv2]
 elif config.model == "rnp":
-    from models.resnet_cifar import resnet18
+    from classifier_models.resnet_cifar import resnet18
     net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
     target_layers = [net.layer4[-1].conv2]
 elif config.model == "repvgg":
@@ -118,4 +133,10 @@ axs[1, 0].axis('off')
 axs[1, 1].imshow(visualization_1)
 axs[1, 1].set_title('poison_heat')
 axs[1, 1].axis('off')
+
+rm_if_exist(f'{target_folder}/GradCam/')
+os.makedirs(f'{target_folder}/GradCam', exist_ok=True)
+plt.savefig(f'{target_folder}/GradCam/hotmap.png')
+
 plt.show()
+
