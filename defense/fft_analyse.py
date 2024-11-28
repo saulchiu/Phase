@@ -18,15 +18,17 @@ from classifier_models.preact_resnet import PreActResNet18
 from tools.utils import manual_seed
 import random
 import matplotlib.pyplot as plt
+import os
+import argparse
+from tools.utils import rm_if_exist
 
-
-if __name__ == '__main__':
-    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241127121540'
+def fft_result(args):
+    target_folder = args.path
+    total = args.total
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
     device = 'cuda:0' 
-    total = 1024
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     train_dl, test_dl = get_dataloader(config.dataset_name, total, config.pin_memory, config.num_workers)
 
@@ -40,7 +42,7 @@ if __name__ == '__main__':
 
     x_c4show = None
     x_p4show = None
-    sys.path.append('./run')
+
     sys.path.append(target_folder)
     from inject_backdoor import patch_trigger
     for i in tqdm(range(total)):
@@ -101,6 +103,25 @@ if __name__ == '__main__':
     ax[1, 1].set_title('poisoned amp')
     ax[1, 2].imshow(pha_after[:, :, 0])
     ax[1, 2].set_title('poisoned pha')
-
+    rm_if_exist(f'{target_folder}/fft_analyze/')
+    os.makedirs(f'{target_folder}/fft_analyze', exist_ok=True)
+    plt.savefig(f'{target_folder}/fft_analyze/hotmap.png')
     plt.show()
+    
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser('')
+    parser.add_argument(
+        '--path',
+        type=str,
+        default='/home/chengyiqiu/code/INBA/results/cifar10/inba/20241127121540'
+    )
+    parser.add_argument(
+        '--total',
+        type=int,
+        default=1024
+    )
+    args = parser.parse_args()
+    fft_result(args)
     

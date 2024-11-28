@@ -1,5 +1,9 @@
+import os
+CWD = os.getcwd()
+REPO_ROOT = CWD.split('INBA')[0] + "INBA/"
+
 import sys
-sys.path.append('../')
+sys.path.append(REPO_ROOT)
 from classifier_models.preact_resnet import PreActResNet18
 from torchvision.transforms.transforms import ToTensor, Resize, Compose
 import torch
@@ -13,22 +17,17 @@ from classifier_models.cnn_lightning_model import BASELightningModule, visualize
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from tools.time import now
-import os
 import shutil
 import yaml
 from pytorch_lightning.loggers import CSVLogger
 from tools.utils import manual_seed, get_model
 from tools.dataset import PoisonDataset, get_dataloader, get_train_and_test_dataset
-import matplotlib.pyplot as plt
-from pytorch_lightning.loggers import TensorBoardLogger
-from repvgg_pytorch.repvgg import RepVGG
-from torchvision.models.convnext import ConvNeXt, CNBlockConfig
 
 
-@hydra.main(version_base=None, config_path='../config', config_name='default')
+@hydra.main(version_base=None, config_path=f'{REPO_ROOT}/config', config_name='default')
 def train_mdoel(config: DictConfig):
     manual_seed(config.seed)
-    target_folder = config.path if config.path != "None" else f'../results/{config.dataset_name}/{config.attack.name}/{config.model}/{now()}'
+    target_folder = config.path if config.path != "None" else f'{REPO_ROOT}/results/{config.dataset_name}/{config.attack.name}/{config.model}/{now()}'
     if not os.path.exists(target_folder):
         os.makedirs(target_folder)
     print(OmegaConf.to_yaml(OmegaConf.to_object(config)))
@@ -38,11 +37,11 @@ def train_mdoel(config: DictConfig):
     main_target_path = os.path.join(target_folder, 'train.py')
     shutil.copy(__file__, main_target_path)
     train_target_path = os.path.join(target_folder, 'cnn_lightning_model.py')
-    shutil.copy('../models/cnn_lightning_model.py', train_target_path)
+    shutil.copy(f'{REPO_ROOT}/classifier_models/cnn_lightning_model.py', train_target_path)
     train_target_path = os.path.join(target_folder, 'inject_backdoor.py')
-    shutil.copy('../tools/inject_backdoor.py', train_target_path)
+    shutil.copy(f'{REPO_ROOT}/tools/inject_backdoor.py', train_target_path)
     train_target_path = os.path.join(target_folder, 'dataset.py')
-    shutil.copy('../tools/dataset.py', train_target_path)
+    shutil.copy(f'{REPO_ROOT}/tools/dataset.py', train_target_path)
     with open(f'{target_folder}/config.yaml', 'w') as f:
         yaml.dump(OmegaConf.to_object(config), f, allow_unicode=True)
     
@@ -66,14 +65,6 @@ def train_mdoel(config: DictConfig):
     assert config.epoch >= config.val_epoch
     trainer = L.Trainer(max_epochs=config.epoch, devices=[config.device], logger=logger, default_root_dir=target_folder)
     trainer.fit(model=model, train_dataloaders=poison_train_dl)
-    # print('----------benign----------')
-    # if config.model == "repvgg":
-    #     model.model.deploy =True
-    # trainer.test(model=model, dataloaders=test_dl)  # benign performance
-    # if config.attack.name != 'benign':
-    #     poison_test_dl = DataLoader(poison_test_ds, batch_size=config.batch, shuffle=False, num_workers=config.num_workers, drop_last=False, pin_memory=config.pin_memory)
-    #     print('----------poison----------')
-    #     trainer.test(model=model, dataloaders=poison_test_dl)  # poison performance
     res = {
         "model": model.model.state_dict(),
         "param_opt": model.opt.state_dict(),

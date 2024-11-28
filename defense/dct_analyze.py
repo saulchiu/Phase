@@ -1,5 +1,4 @@
 import sys
-
 sys.path.append('../')
 from tools.img import tensor2ndarray, rgb2yuv, yuv2rgb, plot_space_target_space, dct_2d_3c_slide_window, dct_2d_3c_full_scale
 from tools.dataset import get_dataloader, get_de_normalization, get_dataset_class_and_scale, get_dataset_normalization, clip_normalized_tensor
@@ -7,26 +6,34 @@ from tools.dataset import get_dataloader, get_de_normalization, get_dataset_clas
 import numpy as np
 import torch
 from tqdm import tqdm
-from tools.img import fft_2d_3c, ifft_2d_3c
-from tools.img import ndarray2tensor
-from tools.frft import FRFT
-from skimage.metrics import structural_similarity
-from skimage.metrics import peak_signal_noise_ratio
-import hydra
 from omegaconf import DictConfig, OmegaConf
 from classifier_models.preact_resnet import PreActResNet18
 from tools.utils import manual_seed
 import random
 import numpy
+import argparse
+import matplotlib.pyplot as plt
+import os
+from tools.utils import rm_if_exist
 
-if __name__ == '__main__':
-    target_folder = '/home/chengyiqiu/code/INBA/results/cifar10/inba/20241127121540'
+def clip(data: numpy.ndarray) -> numpy.ndarray:
+    if data.shape[0] > 64:
+        return np.clip(a=data, a_min=1.5, a_max=4.5)
+    else:
+        from scipy.ndimage import gaussian_filter
+        data = np.log1p(np.abs(data))
+        data = gaussian_filter(data, sigma=2)
+        return data
+    
+def dct_result(args):
+    target_folder = args.path
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
     device = 'cuda:0' 
-    visible_tf = 'dct'
-    total = 1024
+    total = args.total
+    is_clip=True
+
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     train_dl, test_dl = get_dataloader(config.dataset_name, total, config.pin_memory, config.num_workers)
     res_before = np.zeros((scale, scale, 3), dtype=np.float32)
@@ -38,7 +45,7 @@ if __name__ == '__main__':
     x_p4show = None
     de_norm = get_de_normalization(config.dataset_name)
     do_norm = get_dataset_normalization(config.dataset_name)
-    sys.path.append('./run')
+
     sys.path.append(target_folder)
     from inject_backdoor import patch_trigger
     for i in tqdm(range(total)):
@@ -58,7 +65,46 @@ if __name__ == '__main__':
             x_p4show = x_space_poison
     res_before /= total
     res_after /= total
-    # x_f = np.fft.fftshift(res_before, axes=(0, 1))
-    # x_f_poison = np.fft.fftshift(res_after, axes=(0, 1))
-
     plot_space_target_space(x_c4show, x_f, x_p4show, x_f_poison, is_clip=True)
+    if is_clip:
+        x_target = clip(x_f)
+        x_process_target = clip(x_f_poison)
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+    axs[0, 0].imshow(x_c4show)
+    axs[0, 0].set_title(f'Original Image')
+    axs[0, 0].axis('off')
+
+    axs[0, 1].imshow(x_target[:, :, 0], cmap='hot')
+    axs[0, 1].set_title('Original Image DCT')
+    axs[0, 1].axis('off')
+
+    axs[1, 0].imshow(x_p4show)
+    axs[1, 0].set_title(f'after (attack) process')
+    axs[1, 0].axis('off')
+
+    im2 = axs[1, 1].imshow(x_process_target[:, :, 0], cmap='hot')
+    axs[1, 1].set_title(f'(attacked) img in target space')
+    axs[1, 1].axis('off')
+    cbar_ax = fig.add_axes([0.92, 0.1, 0.02, 0.35])
+    fig.colorbar(im2, cax=cbar_ax)
+    plt.tight_layout()
+    rm_if_exist(f'{target_folder}/dct_analyze/')
+    os.makedirs(f'{target_folder}/dct_analyze', exist_ok=True)
+    plt.savefig(f'{target_folder}/dct_analyze/hotmap.png')
+    plt.show()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser('')
+    parser.add_argument(
+        '--path',
+        type=str,
+        default='/home/chengyiqiu/code/INBA/results/cifar10/inba/convnext/20241128150334'
+    )
+    parser.add_argument(
+        '--total',
+        type=int,
+        default=1024
+    )
+    args = parser.parse_args()
+    dct_result(args)
+

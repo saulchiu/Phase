@@ -8,17 +8,15 @@ from torchvision.models import resnet50
 from tools.dataset import get_dataloader
 from tools.img import tensor2ndarray
 import matplotlib.pyplot as plt
-from tools.dataset import get_de_normalization, get_dataset_class_and_scale, get_train_and_test_dataset
+from tools.dataset import get_de_normalization, get_dataset_class_and_scale, get_dataset_normalization
 from omegaconf import OmegaConf, DictConfig
 from tools.utils import manual_seed, rm_if_exist
 from classifier_models.preact_resnet import PreActResNet18
-from tools.inject_backdoor import patch_trigger
 import torch
 import random
 import PIL
 from tools.dataset import get_benign_transform
 import numpy as np
-from tools.inject_backdoor import patch_trigger
 import os
 import argparse
 
@@ -101,7 +99,15 @@ elif config.model == "repvgg":
     net.deploy =True
 else:
     raise NotImplementedError(config.model)
-x_p = patch_trigger(get_de_normalization(config.dataset_name)(x_c).squeeze(), config)
+
+de_norm = get_de_normalization(config.dataset_name)
+do_norm = get_dataset_normalization(config.dataset_name)
+
+sys.path.append(target_folder)
+from inject_backdoor import patch_trigger
+x_p = patch_trigger(de_norm(x_c).squeeze(), config)
+x_p.clip_(0, 1)
+x_p = do_norm(x_p)
 x_p = x_p.to(device)
 net.load_state_dict(ld['model'])
 net.to(device=device)
@@ -115,12 +121,14 @@ bd_heat: np.ndarray = cam(x_p.unsqueeze(0), targets=[ClassifierOutputTarget(y_p.
 
 visualization_0 = show_cam_on_image(tensor2ndarray(get_de_normalization(config.dataset_name)(x_c).squeeze()) / 255.,
                                      benign_heat[0, :], use_rgb=True)
+x_p = de_norm(x_p).squeeze()
 visualization_1 = show_cam_on_image(tensor2ndarray(x_p) / 255., bd_heat[0, :], use_rgb=True)
 
 _, axs = plt.subplots(2, 2, figsize=(15, 10))
 axs[0, 0].imshow(tensor2ndarray(get_de_normalization(config.dataset_name)(x_c).squeeze()))
 axs[0, 0].set_title(f'x_c, label: {y_c.item()}')
 axs[0, 0].axis('off')
+
 
 axs[0, 1].imshow(tensor2ndarray(x_p))
 axs[0, 1].set_title(f'x_p, label: {y_p.item()}')

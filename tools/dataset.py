@@ -1,4 +1,6 @@
 import sys
+REPO_ROOT='/home/chengyiqiu/code/INBA/'
+DATA_PATH = f'{REPO_ROOT}/data'
 sys.path.append('../')
 from torchvision.transforms.transforms import Compose, ToTensor, Resize, Normalize, RandomCrop, RandomHorizontalFlip
 from torch.utils.data.dataloader import DataLoader
@@ -8,7 +10,6 @@ import random
 import torch
 from torch.utils.data import Dataset
 
-DATA_PATH = '/home/chengyiqiu/code/INBA/data'
 
 
 def get_dataloader(dataset_name: str, batch_size: int, pin_memory: bool, num_workers: int):
@@ -208,17 +209,6 @@ def get_train_and_test_dataset(dataset_name):
     return train_ds, test_ds
 
 def clip_normalized_tensor(tensor, normalization):
-    """
-    对归一化后的图像进行剪裁，确保其值在归一化范围内。
-
-    Args:
-        tensor (torch.Tensor): 归一化后的图像张量。
-        normalization (Normalize): torchvision.transforms.Normalize 的实例，
-                                   包含均值和标准差。
-
-    Returns:
-        torch.Tensor: 剪裁后的张量。
-    """
     mean = torch.tensor(normalization.mean, device=tensor.device).view(1, -1, 1, 1)
     std = torch.tensor(normalization.std, device=tensor.device).view(1, -1, 1, 1)
     min_val = (0 - mean) / std

@@ -1,5 +1,6 @@
+REPO_ROOT='/home/chengyiqiu/code/INBA/'
 import sys
-sys.path.append('../')
+sys.path.append(REPO_ROOT)
 import torch
 import pytorch_lightning as L
 import random

@@ -244,7 +244,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         x_re[x_c <= 30] = x_c[x_c <= 30]
         x_re = x_re.astype(np.float32)
         x_p = ndarray2tensor(x_re)
-    elif attack_name == 'inba':
+    elif attack_name == 'phase':
         # ld = torch.load(f'{config.path}/trigger.pth')
         # u_tg = ld['u_tg'].to(device)
         # v_tg = ld['v_tg'].to(device)
@@ -281,25 +281,27 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         trigger_size = config.attack.trigger_size
         phase_trigger = config.attack.phase_trigger
 
+        inject_trigger = inplant_imaginary_part_trigger
+
         # poison HH
         if config.attack.HH == 1:
             HH_yuv = np.stack(rgb_to_yuv(HH[:,:,0], HH[:,:,1], HH[:,:,2]), axis=-1)
-            HH_yuv = inplant_phase_trigger(HH_yuv, window_size, window_size, phase_trigger, ch_list)
+            HH_yuv = inject_trigger(HH_yuv, window_size, window_size, phase_trigger, ch_list)
             HH = np.stack(yuv_to_rgb(HH_yuv[:,:,0], HH_yuv[:,:,1], HH_yuv[:,:,2]), axis=-1)
         # poison HL
         if config.attack.HL == 1:
             HL_yuv = np.stack(rgb_to_yuv(HL[:,:,0], HL[:,:,1], HL[:,:,2]), axis=-1)
-            HL_yuv = inplant_phase_trigger(HL_yuv, window_size, trigger_size, phase_trigger)
+            HL_yuv = inject_trigger(HL_yuv, window_size, trigger_size, phase_trigger)
             HL = np.stack(yuv_to_rgb(HL_yuv[:,:,0], HL_yuv[:,:,1], HL_yuv[:,:,2]), axis=-1) 
         # poison LH
         if config.attack.LH == 1:
             LH_yuv = np.stack(rgb_to_yuv(LH[:,:,0], LH[:,:,1], LH[:,:,2]), axis=-1)
-            LH_yuv = inplant_phase_trigger(LH_yuv, window_size, trigger_size, phase_trigger)
+            LH_yuv = inject_trigger(LH_yuv, window_size, trigger_size, phase_trigger)
             LH = np.stack(yuv_to_rgb(LH_yuv[:,:,0], LH_yuv[:,:,1], LH_yuv[:,:,2]), axis=-1) 
         # poison LL
         if config.attack.LL == 1:
             LL_yuv = np.stack(rgb_to_yuv(LL[:,:,0], LL[:,:,1], LL[:,:,2]), axis=-1)
-            LL_yuv = inplant_phase_trigger(LL_yuv.copy(), window_size, trigger_size, phase_trigger, ch_list)
+            LL_yuv = inject_trigger(LL_yuv.copy(), window_size, trigger_size, phase_trigger, ch_list)
             LL = np.stack(yuv_to_rgb(LL_yuv[:,:,0], LL_yuv[:,:,1], LL_yuv[:,:,2]), axis=-1) 
 
 
@@ -335,6 +337,20 @@ def inplant_phase_trigger(target, window_size, trigger_size, phase_trigger, ch_l
                 amp, pha = np.abs(tmp_fft), np.angle(tmp_fft)
                 pha[-1-trigger_size:-1, -1-trigger_size:-1] = phase_trigger
                 tmp_fft = amp * np.exp(1j * pha)
+                tmp = np.fft.ifft2(tmp_fft, axes=(0, 1))
+                tmp = tmp.real
+                target[i:i+window_size, j:j+window_size, ch] = tmp
+    return target
+
+def inplant_imaginary_part_trigger(target, window_size, trigger_size, phase_trigger, ch_list=[1, 2]):
+    for ch in ch_list:
+        for i in range(0, target.shape[0], window_size):
+            for j in range(0, target.shape[1], window_size):
+                tmp = target[i:i+window_size, j:j+window_size, ch]
+                tmp_fft = np.fft.fft2(tmp, axes=(0, 1))
+                re, im = np.real(tmp_fft), np.imag(tmp_fft)
+                im[-1-trigger_size:-1, -1-trigger_size:-1] = phase_trigger
+                tmp_fft = re + 1j * im
                 tmp = np.fft.ifft2(tmp_fft, axes=(0, 1))
                 tmp = tmp.real
                 target[i:i+window_size, j:j+window_size, ch] = tmp

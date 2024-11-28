@@ -1,6 +1,9 @@
 # universal function
 import sys
-sys.path.append('/home/chengyiqiu/code/INBA/')
+
+REPO_ROOT = '/home/chengyiqiu/code/INBA/'
+
+sys.path.append(REPO_ROOT)
 
 import torch
 import numpy as np
@@ -29,6 +32,7 @@ def get_model(name, num_class, device):
         from classifier_models.convnext2 import convnextv2_huge
         net = convnextv2_huge(num_classes=num_class)
     elif name == "convnext":
+        # lr=1e-3 weight_decay=1e-1
         from classifier_models.convnext import ConvNeXt
         net = ConvNeXt(num_class,
                         channel_list = [64, 128, 256, 512],
