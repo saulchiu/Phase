@@ -274,7 +274,6 @@ def test(model, criterion, data_loader):
 """
 My Modify
 """
-
 import sys
 sys.path.append('/home/chengyiqiu/code/INBA/')
 from tools.dataset import get_dataloader, get_dataset_class_and_scale, get_train_and_test_dataset, PoisonDataset

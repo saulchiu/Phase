@@ -33,7 +33,7 @@ def get_argument():
     # Model hyperparameters
     # Model hyperparameters
     parser.add_argument("--n_sample", type=int, default=100)
-    parser.add_argument("--n_test", type=int, default=63)
+    parser.add_argument("--n_test", type=int, default=100)
     parser.add_argument("--detection_boundary", type=float, default=0.2)  # According to the original paper
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--test_rounds", type=int, default=10)
@@ -77,6 +77,8 @@ class Denormalize:
 
 class STRIP:
     def _superimpose(self, background, overlay):
+        background = tensor2ndarray(background)
+        overlay = tensor2ndarray(overlay)
         output = cv2.addWeighted(background, 1, overlay, 1, 0)
         if len(output.shape) == 2:
             output = np.expand_dims(output, 2)
@@ -88,9 +90,8 @@ class STRIP:
         index_overlay = np.random.randint(0, len(dataset), size=self.n_sample)
         for index in range(self.n_sample):
             ele = dataset[index_overlay[index]][0]
-            if str(type(background)) != "<class 'torch.Tensor'>":
-                ele = tensor2ndarray(ele)
             # print(type(background))
+            # print(type(ele))
             add_image = self._superimpose(background, ele)
             add_image = self.normalize(add_image)
             x1_add[index] = add_image
@@ -172,7 +173,7 @@ def strip(opt, mode="clean"):
     net.to(device)
     if config.model == "repvgg":
         net.deploy =True
-    train_loader, test_dataloader = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
+    _, test_dataloader = get_dataloader(config.dataset_name, 1024, config.pin_memory, config.num_workers)
     testset = test_dataloader.dataset
     netC = net
 
@@ -184,6 +185,7 @@ def strip(opt, mode="clean"):
     list_entropy_benign = []
 
     denormalizer = get_de_normalization(opt.dataset)
+    do_norm = get_dataset_normalization(config.dataset_name)
 
     if mode == "attack":
         # Testing with perturbed data
@@ -194,9 +196,12 @@ def strip(opt, mode="clean"):
         for i in range(inputs.shape[0]):
             p = patch_trigger(inputs[i], config)
             # p = inputs[i]
-            bd_inputs.append(tensor2ndarray(p))
-        bd_inputs = np.stack(bd_inputs, axis=0)
-        bd_inputs = np.clip(bd_inputs, 0, 255).astype(np.uint8)
+            bd_inputs.append(p)
+            if len(bd_inputs) >= opt.n_test:
+                break
+        bd_inputs = torch.stack(bd_inputs, dim=0)
+        bd_inputs = bd_inputs.clip_(0, 1)
+        bd_inputs = do_norm(bd_inputs)
         for index in range(opt.n_test):
             background = bd_inputs[index]
             # print(type(background))
@@ -248,6 +253,9 @@ def main():
     if not os.path.exists(result_path):
         os.makedirs(result_path)
     result_path = os.path.join("{}_{}_output.txt".format(opt.dataset, opt.attack_mode))
+    result_path = f'{opt.path}/STRIP/{result_path}'
+
+    min_entropy = min(lists_entropy_trojan + lists_entropy_benign)
 
     with open(result_path, "w+") as f:
         for index in range(len(lists_entropy_trojan)):
@@ -263,9 +271,7 @@ def main():
                 f.write("{} ".format(lists_entropy_benign[index]))
             else:
                 f.write("{}".format(lists_entropy_benign[index]))
-
-    min_entropy = min(lists_entropy_trojan + lists_entropy_benign)
-
+        f.write(f"\n{min_entropy}")
     # Determining
     print("Min entropy trojan: {}, Detection boundary: {}".format(min_entropy, opt.detection_boundary))
     if min_entropy < opt.detection_boundary:

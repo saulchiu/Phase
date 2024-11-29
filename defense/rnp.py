@@ -194,6 +194,7 @@ def main(args):
     config = OmegaConf.load(path)
     manual_seed(config.seed)
     args.log_root = f'{target_folder}/rnp/log'
+    args.backdoor_model_path = args.output_weight = f'{target_folder}/rnp/'
     os.makedirs(args.log_root, exist_ok=True)
 
     logger = logging.getLogger(__name__)
@@ -222,15 +223,6 @@ def main(args):
 
 
     logger.info('----------- Backdoor Model Initialization --------------')
-    # state_dict = torch.load(args.backdoor_model_path, map_location=device)
-    # net = getattr(models, args.arch)(num_classes=10, norm_layer=None)
-    # load_state_dict(net, orig_state_dict=state_dict)
-    # net = net.to(device)
-    # if config.model == "resnet18":
-    #     net = PreActResNet18()
-    #     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
-    #     net.load_state_dict(ld['model'])
-    #     net.to(device=device)
     if config.model == "resnet18":
         net = PreActResNet18(num_classes=10).to(f'cuda:{config.device}')
     elif config.model == "rnp":
@@ -418,7 +410,7 @@ if __name__ == '__main__':
     parser.add_argument('--recovering_epochs', type=int, default=20, help='the number of epochs for recovering')
     parser.add_argument('--mask_file', type=str, default=None, help='The text file containing the mask values')
     parser.add_argument('--pruning-by', type=str, default='threshold', choices=['number', 'threshold'])
-    parser.add_argument('--pruning-max', type=float, default=0.35, help='the maximum number/threshold for pruning')
+    parser.add_argument('--pruning-max', type=float, default=0.01, help='the maximum number/threshold for pruning')
     parser.add_argument('--pruning-step', type=float, default=0.05, help='the step size for evaluating the pruning')
 
     parser.add_argument('--path', type=str)
@@ -426,7 +418,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args_dict = vars(args)
     print(args_dict)
-    os.makedirs(args.log_root, exist_ok=True)
+    # os.makedirs(args.log_root, exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     main(args)

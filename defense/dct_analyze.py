@@ -15,6 +15,7 @@ import argparse
 import matplotlib.pyplot as plt
 import os
 from tools.utils import rm_if_exist
+import PIL.Image
 
 def clip(data: numpy.ndarray) -> numpy.ndarray:
     if data.shape[0] > 64:
@@ -91,6 +92,9 @@ def dct_result(args):
     os.makedirs(f'{target_folder}/dct_analyze', exist_ok=True)
     plt.savefig(f'{target_folder}/dct_analyze/hotmap.png')
     plt.show()
+
+
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('')

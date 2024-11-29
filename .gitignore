@@ -9,6 +9,7 @@ results/
 .DS_Store
 .cadence
 */test.py
+*/logs
 
 
 # Byte-compiled / optimized / DLL files

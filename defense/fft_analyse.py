@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import os
 import argparse
 from tools.utils import rm_if_exist
+import PIL.Image
 
 def fft_result(args):
     target_folder = args.path
@@ -106,7 +107,6 @@ def fft_result(args):
     os.makedirs(f'{target_folder}/fft_analyze', exist_ok=True)
     plt.savefig(f'{target_folder}/fft_analyze/hotmap.png')
     plt.show()
-    
 
 
 if __name__ == '__main__':
