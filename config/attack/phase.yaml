@@ -1,15 +1,15 @@
 name: phase
 mode: train
 # for small size (CIFAR10, GTSRB), use [1, 2]. For big size, use [1]
-ch_list: [1, 2]
+ch_list: [1]
 window_size: 8
-trigger_size: 5
-phase_trigger: 0
-dwt_level: 2
-LL: 0
-LH: 1
-HL: 1
-HH: 1
+trigger_size: 6
+phase_trigger: 1
+dwt_level: 1
+LL: 1
+LH: 0
+HL: 0
+HH: 0
 ada: 1
 # For ResNet18, set the enhance coefficient to 0.05.
 enhance: 0.1

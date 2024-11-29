@@ -59,16 +59,15 @@ def dct_result(args):
         x_f_poison = dct_2d_3c_full_scale(x_space_poison.astype(float))
         res_before += x_f
         res_after += x_f_poison
-        # if y.item() == 9 and x_p4show is None:
-        if y.item() == 1:
+        if y.item() == 9 and x_p4show is None:
             x_c4show = x_space
             x_p4show = x_space_poison
     res_before /= total
     res_after /= total
-    plot_space_target_space(x_c4show, x_f, x_p4show, x_f_poison, is_clip=True)
+    # plot_space_target_space(x_c4show, x_f, x_p4show, x_f_poison, is_clip=True)
     if is_clip:
-        x_target = clip(x_f)
-        x_process_target = clip(x_f_poison)
+        x_target = clip(res_before)
+        x_process_target = clip(res_after)
     fig, axs = plt.subplots(2, 2, figsize=(15, 10))
     axs[0, 0].imshow(x_c4show)
     axs[0, 0].set_title(f'Original Image')

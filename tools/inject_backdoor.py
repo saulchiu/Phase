@@ -281,7 +281,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
         trigger_size = config.attack.trigger_size
         phase_trigger = config.attack.phase_trigger
 
-        inject_trigger = inplant_imaginary_part_trigger
+        inject_trigger = inplant_phase_trigger
 
         # poison HH
         if config.attack.HH == 1:
@@ -318,7 +318,8 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:  # do not do any c
             x_c = x_0.clone()
             x_c_fft = torch.fft.fft2(x_c, dim=(1, 2))
             x_p_fft = torch.fft.fft2(x_p, dim=(1, 2))
-            x_p_fft = torch.abs(x_c_fft) * torch.exp(1j * torch.angle(x_p_fft))
+            # x_p_fft = torch.abs(x_c_fft) * torch.exp(1j * torch.angle(x_p_fft))
+            x_p_fft = torch.real(x_c_fft) + (1j * torch.imag(x_p_fft))
             x_p = torch.fft.ifft2(x_p_fft, dim=(1, 2))
             x_p = torch.real(x_p)
             x_p = x_p.to(x_0.dtype)
@@ -349,7 +350,7 @@ def inplant_imaginary_part_trigger(target, window_size, trigger_size, phase_trig
                 tmp = target[i:i+window_size, j:j+window_size, ch]
                 tmp_fft = np.fft.fft2(tmp, axes=(0, 1))
                 re, im = np.real(tmp_fft), np.imag(tmp_fft)
-                im[-1-trigger_size:-1, -1-trigger_size:-1] = phase_trigger
+                im[-1-trigger_size:-1, -1-trigger_size:-1] = phase_trigger * np.pi
                 tmp_fft = re + 1j * im
                 tmp = np.fft.ifft2(tmp_fft, axes=(0, 1))
                 tmp = tmp.real

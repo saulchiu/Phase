@@ -124,7 +124,7 @@ class PoisonDataset(Dataset):
         if do_poison:
             x = self.de_norm(x).squeeze()
             x_p = self.transform(x)
-            # x_p.clip_(0, 1)
+            x_p.clip_(0, 1)
             x_p = self.do_norm(x_p)
             """
             x_enhance

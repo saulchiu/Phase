@@ -62,8 +62,7 @@ def fft_result(args):
         pha_before += pha_c
         amp_after += amp_p
         pha_after += pha_p
-        # if y.item() == 9 and x_p4show is None:
-        if y.item() == 1 or total <= 128:
+        if y.item() == 9 and x_p4show is None:
             x_c4show = x_space
             x_p4show = x_space_poison
     amp_before /= total
