@@ -11,7 +11,8 @@ import torch.nn as nn
 import pandas as pd
 from collections import OrderedDict
 import classifier_models
-from tools.dataset import get_train_and_test_dataset, PartialDataset, PoisonDataset
+from tools.dataset import get_train_and_test_dataset, PartialDataset, PoisonDataset, get_dataset_class_and_scale
+from tools.utils import get_model
 from torch.utils.data.dataloader import DataLoader
 
 if torch.cuda.is_available():
@@ -325,19 +326,11 @@ def main(args):
     # net = getattr(models, args.arch)(num_classes=10, norm_layer=None)
     # load_state_dict(net, orig_state_dict=state_dict)
     # net = net.to(device)
-    if config.model == "resnet18":
-        net = PreActResNet18(num_classes=10).to(f'cuda:{config.device}')
-    elif config.model == "rnp":
-        from classifier_models.resnet_cifar import resnet18
-        net = resnet18(num_classes=10).to(f'cuda:{config.device}')
-    elif config.model == "repvgg":
-        from repvgg_pytorch.repvgg import RepVGG
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=10, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
-    else:
-        raise NotImplementedError(config.model)
+    num_class, scale = get_dataset_class_and_scale(config.dataset_name)
+    net = get_model(config.model, num_class, device=device)
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
     net.load_state_dict(ld['model'])
-    net.to(device=device)
+    net.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 
     # Step 3: pruning
@@ -410,7 +403,7 @@ if __name__ == '__main__':
     parser.add_argument('--recovering_epochs', type=int, default=20, help='the number of epochs for recovering')
     parser.add_argument('--mask_file', type=str, default=None, help='The text file containing the mask values')
     parser.add_argument('--pruning-by', type=str, default='threshold', choices=['number', 'threshold'])
-    parser.add_argument('--pruning-max', type=float, default=0.01, help='the maximum number/threshold for pruning')
+    parser.add_argument('--pruning-max', type=float, default=0.9, help='the maximum number/threshold for pruning')
     parser.add_argument('--pruning-step', type=float, default=0.05, help='the step size for evaluating the pruning')
 
     parser.add_argument('--path', type=str)

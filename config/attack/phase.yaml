@@ -1,14 +1,15 @@
 name: phase
 mode: train
 ch_list: [1]
-window_size: 8
-trigger_size: 6
-phase_trigger: 1
+window_size: 4
+trigger_size: 2
+phase_trigger: 0
 dwt_level: 1
 LL: 1
 LH: 0
 HL: 0
 HH: 0
-ada: 1
+# mix=0: mix real part; mix=1: mix amplitude.
+mix: -1
 # For ResNet18, set the enhance coefficient to 0.05.
 enhance: 0.1

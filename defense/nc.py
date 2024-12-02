@@ -70,7 +70,7 @@ from omegaconf import OmegaConf
 import sys
 sys.path.append('../')
 from tools.utils import manual_seed, get_model, rm_if_exist
-from tools.dataset import get_dataset_class_and_scale, get_dataloader
+from tools.dataset import get_dataset_class_and_scale, get_dataloader, get_de_normalization, get_dataset_normalization
 import os
 import argparse
 
@@ -99,13 +99,15 @@ if __name__ == "__main__":
         "num_classes": num_class,
         "image_size": (scale, scale)
     }
-    train_loader, _ = get_dataloader(config.dataset_name, param['batch_size'], config.pin_memory, config.num_workers)
+    train_dl, test_dl = get_dataloader(config.dataset_name, param['batch_size'], config.pin_memory, config.num_workers)
     norm_list = []
     
+    lodaer = test_dl
+
     rm_if_exist(f'{target_folder}/nc')
     os.makedirs(f'{target_folder}/nc', exist_ok=True)
     for label in range(param["num_classes"]):
-        trigger, mask = train(net, label, train_loader, param)
+        trigger, mask = train(net, label, lodaer, param)
         norm_list.append(mask.sum().item())
         torchvision.utils.save_image(mask, f'{target_folder}/nc/mask_{label}.png', normalize=True)
         torchvision.utils.save_image(trigger * mask, f'{target_folder}/nc/trigger_{label}.png', normalize=True)

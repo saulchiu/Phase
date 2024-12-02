@@ -131,13 +131,11 @@ class PoisonDataset(Dataset):
             """
             if self.config.attack.mode == "train" and self.config.attack.name == 'inba' and random.random() < 0.1:
                 eps = torch.randn_like(x_p, device=x_p.device)
-                # M = x_p - x
-                # x_e = x_p + 0.1 * eps * M
                 x_e = x_p + self.config.attack.enhance * eps
                 return x_e, y
             x = x_p
             y = y - y + self.config.target_label
-        # if y == 0 and random.random() < 0.1:
+        # if y == 0 and random.random() < 0.05:
         #     x = x + torch.randn_like(x, device=x.device) * 0.1
         return x, y
 
