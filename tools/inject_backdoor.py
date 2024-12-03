@@ -167,27 +167,6 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
 
         # do 3-level dwt for x_c
         x_c_re = np.zeros_like(x_c)
-        # for i in range(3):  # 3 channel
-        #     L_1, (H_11, H_12, H_13) = pywt.dwt2(x_c[:, :, i], wave)
-        #     L_2, (H_21, H_22, H_23) = pywt.dwt2(L_1, wave)
-        #     L_3, (H_31, H_32, H_33) = pywt.dwt2(L_2, wave)
-
-        #     x_p1 = np.array(x_p_img.resize((L_1.shape[0], L_1.shape[1])))
-        #     _, (HP_21, HP_22, HP_23) = pywt.dwt2(x_p1[:, :, i], wave)
-        #     x_p2 = np.array(x_p_img.resize((L_2.shape[0], L_2.shape[1])))
-        #     _, (HP_31, HP_32, HP_33) = pywt.dwt2(x_p2[:, :, i], wave)
-
-        #     H_21 = beta * H_21 + (1 - beta) * HP_21
-        #     H_22 = beta * H_22 + (1 - beta) * HP_22
-        #     H_23 = beta * H_23 + (1 - beta) * HP_23
-
-        #     H_31 = alpha * H_31 + (1 - alpha) * HP_31
-        #     H_32 = alpha * H_32 + (1 - alpha) * HP_32
-        #     H_33 = alpha * H_33 + (1 - alpha) * HP_33
-
-        #     res_coe = [L_3, (H_31, H_32, H_33), (H_21, H_22, H_23), (H_11, H_12, H_13)]
-        #     x_c_re[:, :, i] = pywt.waverec2(coeffs=res_coe, wavelet=wave)
-        
         [cl,(cH3,cV3,cD3),(cH2,cV2,cD2),(cH1,cV1,cD1)] = pywt.wavedec2(x_c, wavelet=wave, level=3, axes=(0, 1))
         # get the resize shape
         L1, (_, _, _) = pywt.wavedec2(x_c, wavelet=wave, level=1, axes=(0, 1))
@@ -196,22 +175,15 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_p1 = np.array(x_p_img.resize((L1.shape[0], L1.shape[1])))
         x_p2 = np.array(x_p_img.resize((L2.shape[0], L2.shape[1])))
         [_, (ch1, cv1, cd1)] = pywt.wavedec2(x_p2, 'db2', level=1, axes=(0, 1))
-        # [_, (chb1, cvb1, cdb1)] = pywt.wavedec2(x_p1, 'db2', level=1, axes=(0, 1))
         [cb1, (chb1, cvb1, cdb1),(chb2, cvb2, cdb2)] = pywt.wavedec2(x_p, wave, level=2, axes=(0, 1))       
 
         cH3 = cH3 * alpha + ch1 * (1 - alpha)
         cV3 =  cV3 * alpha + cv1 * (1 - alpha)
         cD3 =  cD3 * alpha + cd1 * (1 - alpha)
-        # cH3 = cH3 + ch1 * (1 - alpha)
-        # cV3 =  cv1 * (1 - alpha)
-        # cD3 =  cd1 * (1 - alpha)
 
         cH2 = cH2 * beta + chb1 * (1 - beta)
         cV2 =  cV2 * beta + cvb1 * (1 - beta)
         cD2 = cD2 * beta + cdb1 * (1 - beta)
-        # cH2 = cH2 + chb1 * (1 - beta)
-        # cV2 =  cvb1 * (1 - beta)
-        # cD2 = cdb1 * (1 - beta)
         x_c_re = pywt.waverec2([cl,(cH3,cV3,cD3),(cH2,cV2,cD2),(cH1,cV1,cD1)], wave, axes=(0, 1))
         x_c_re = np.array(x_c_re,np.float32)
 
@@ -255,9 +227,10 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         trigger_size = config.attack.trigger_size
         phase_trigger = config.attack.phase_trigger * np.pi
         inject_trigger = inplant_phase_trigger
+        wave = config.attack.dwt_wave
         x_p = tensor2ndarray(x_0)
         if config.attack.dwt_level > 0:
-            coeff =  pywt.wavedec2(x_p, wavelet='haar', level=config.attack.dwt_level, axes=(0, 1))
+            coeff =  pywt.wavedec2(x_p, wavelet=wave, level=config.attack.dwt_level, axes=(0, 1))
             LL = coeff[0]
             (LH, HL, HH) = coeff[-1]
             # poison HH
@@ -282,7 +255,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
                 LL = np.stack(yuv_to_rgb(LL_yuv[:,:,0], LL_yuv[:,:,1], LL_yuv[:,:,2]), axis=-1) 
             coeff[0] = LL
             coeff[-1] = (LH, HL, HH)
-            x_p = pywt.waverec2(coeff, wavelet='haar', axes=(0, 1))
+            x_p = pywt.waverec2(coeff, wavelet=wave, axes=(0, 1))
         else:
             x_p_yuv = np.stack(rgb_to_yuv(x_p[:,:,0], x_p[:,:,1], x_p[:,:,2]), axis=-1)
             x_p_yuv = inject_trigger(x_p_yuv, window_size, trigger_size, phase_trigger)
@@ -335,8 +308,8 @@ def inplant_phase_trigger(target, window_size, trigger_size, phase_trigger, ch_l
     for ch in ch_list:
         for i in range(0, target.shape[0], window_size):
             for j in range(0, target.shape[1], window_size):
-                if random.random() < 0.2:
-                     pass
+                # if random.random() < 0.2:
+                #      pass
                 tmp = target[i:i+window_size, j:j+window_size, ch]
                 tmp_fft = np.fft.fft2(tmp, axes=(0, 1))
                 amp, pha = np.abs(tmp_fft), np.angle(tmp_fft)

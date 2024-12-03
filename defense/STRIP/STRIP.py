@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 import argparse
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 from tools.utils import manual_seed, get_model, rm_if_exist
 from tools.dataset import get_dataset_class_and_scale, get_dataloader, get_de_normalization, get_dataset_normalization
 from omegaconf import OmegaConf
@@ -27,6 +27,8 @@ def get_argument():
     parser.add_argument("--dataset", type=str, default="cifar10")
     parser.add_argument("--attack_mode", type=str, default="all2one")
     parser.add_argument("--temps", type=str, default="./temps")
+
+
     parser.add_argument('--path', type=str)
 
     # ---------------------------- For Neural Cleanse --------------------------
@@ -204,10 +206,8 @@ def strip(opt, mode="clean"):
         bd_inputs = do_norm(bd_inputs)
         for index in range(opt.n_test):
             background = bd_inputs[index]
-            # print(type(background))
             entropy = strip_detector(background, testset, netC)
             list_entropy_trojan.append(entropy)
-            # progress_bar(index, opt.n_test)
 
         # Testing with clean data
         for index in range(opt.n_test):
@@ -254,6 +254,9 @@ def main():
         os.makedirs(result_path)
     result_path = os.path.join("{}_{}_output.txt".format(opt.dataset, opt.attack_mode))
     result_path = f'{opt.path}/STRIP/{result_path}'
+
+    rm_if_exist(f'{opt.path}/STRIP/')
+    os.makedirs(f'{opt.path}/STRIP/', exist_ok=True)
 
     min_entropy = min(lists_entropy_trojan + lists_entropy_benign)
 

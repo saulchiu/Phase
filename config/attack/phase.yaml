@@ -3,13 +3,13 @@ mode: train
 ch_list: [1]
 window_size: 4
 trigger_size: 2
-phase_trigger: 0
+phase_trigger: 1
 dwt_level: 1
+dwt_wave: 'db2'
 LL: 1
 LH: 0
 HL: 0
 HH: 0
 # mix=0: mix real part; mix=1: mix amplitude.
 mix: -1
-# For ResNet18, set the enhance coefficient to 0.05.
-enhance: 0.1
+enhance: 0.01

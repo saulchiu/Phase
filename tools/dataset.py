@@ -109,34 +109,34 @@ def get_poison_transform(config, train=True, random_crop_padding=4):
     return Compose(trans_list)
 
 
-
+from omegaconf import DictConfig
 class PoisonDataset(Dataset):
     def __init__(self, dataset, config):
         self.dataset = dataset
         self.transform = BadTransform(config)
         self.do_norm = get_dataset_normalization(config.dataset_name)
         self.de_norm = get_de_normalization(config.dataset_name)
-        self.config = config
+        self.config: DictConfig= config
+        self.poisoned_num = 0
 
     def __getitem__(self, index):
         x, y = self.dataset[index]
         do_poison = (random.random() < self.config.ratio) and self.config.attack.name != 'benign'
         if do_poison:
+            # enhance
+            if self.config.attack.mode == "train" and self.config.attack.name == 'inba' and random.random() < 0.1:
+                x = self.de_norm(x).squeeze()
+                x_p = self.transform(x)
+                # x_p.clip_(0, 1)
+                x_e = self.do_norm(x_p) + self.config.attack.enhance * torch.rand_like(x_p, device=x_p.device)
+                return x_e, y            
+            # poisoned
             x = self.de_norm(x).squeeze()
             x_p = self.transform(x)
-            x_p.clip_(0, 1)
+            # x_p.clip_(0, 1)
             x_p = self.do_norm(x_p)
-            """
-            x_enhance
-            """
-            if self.config.attack.mode == "train" and self.config.attack.name == 'inba' and random.random() < 0.1:
-                eps = torch.randn_like(x_p, device=x_p.device)
-                x_e = x_p + self.config.attack.enhance * eps
-                return x_e, y
             x = x_p
             y = y - y + self.config.target_label
-        # if y == 0 and random.random() < 0.05:
-        #     x = x + torch.randn_like(x, device=x.device) * 0.1
         return x, y
 
     def __len__(self):

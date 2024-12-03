@@ -5,7 +5,7 @@ import tqdm
 import torchvision
 
 
-def train(model, target_label, train_loader, param):
+def train(model, target_label, train_loader, param, do_norm, de_norm):
     print("Processing label: {}".format(target_label))
 
     width, height = param["image_size"]
@@ -30,7 +30,9 @@ def train(model, target_label, train_loader, param):
         for images, _ in tqdm.tqdm(train_loader, desc='Epoch %3d' % (epoch)):
             optimizer.zero_grad()
             images = images.to(device)
+            images = de_norm(images)
             trojan_images = (1 - torch.unsqueeze(mask, dim=0)) * images + torch.unsqueeze(mask, dim=0) * trigger
+            trojan_images = do_norm(trojan_images)
             y_pred = model(trojan_images)
             y_target = torch.full((y_pred.size(0),), target_label, dtype=torch.long).to(device)
             loss = criterion(y_pred, y_target) + lamda * torch.sum(torch.abs(mask))
@@ -68,7 +70,7 @@ def outlier_detection(l1_norm_list):
 
 from omegaconf import OmegaConf
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 from tools.utils import manual_seed, get_model, rm_if_exist
 from tools.dataset import get_dataset_class_and_scale, get_dataloader, get_de_normalization, get_dataset_normalization
 import os
@@ -101,13 +103,15 @@ if __name__ == "__main__":
     }
     train_dl, test_dl = get_dataloader(config.dataset_name, param['batch_size'], config.pin_memory, config.num_workers)
     norm_list = []
+    de_norm = get_de_normalization(config.dataset_name)
+    do_norm = get_dataset_normalization(config.dataset_name)
     
     lodaer = test_dl
 
     rm_if_exist(f'{target_folder}/nc')
     os.makedirs(f'{target_folder}/nc', exist_ok=True)
     for label in range(param["num_classes"]):
-        trigger, mask = train(net, label, lodaer, param)
+        trigger, mask = train(net, label, lodaer, param, do_norm, de_norm)
         norm_list.append(mask.sum().item())
         torchvision.utils.save_image(mask, f'{target_folder}/nc/mask_{label}.png', normalize=True)
         torchvision.utils.save_image(trigger * mask, f'{target_folder}/nc/trigger_{label}.png', normalize=True)
