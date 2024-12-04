@@ -67,17 +67,8 @@ def manual_seed(seed: int):
 def get_model(name, num_class, device):
     if name == "resnet18":
         print(sys.path)
-        from classifier_models.preact_resnet import PreActResNet18
-        net = PreActResNet18(num_classes=num_class).to(device)
-    elif name == "rnp":
-        from classifier_models.resnet_cifar import resnet18
-        net = resnet18(num_classes=num_class).to(device)
-    elif name == "repvgg":
-        from repvgg_pytorch.repvgg import RepVGG
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device)
-    elif name == "convnext2":
-        from classifier_models.convnext2 import convnextv2_huge
-        net = convnextv2_huge(num_classes=num_class)
+        from classifier_models.resnet import ResNet18
+        net = ResNet18(num_classes=num_class).to(device)
     elif name == "convnext":
         # lr=1e-3 weight_decay=1e-1
         from classifier_models.convnext import ConvNeXt
@@ -86,6 +77,19 @@ def get_model(name, num_class, device):
                         num_blocks_list = [2, 2, 2, 2],
                         kernel_size=7, patch_size=1,
                         res_p_drop=0.)
+    elif name == "repvgg":
+        from repvgg_pytorch.repvgg import RepVGG
+        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device)
+    elif name == "presnet18":
+        print(sys.path)
+        from classifier_models.preact_resnet import PreActResNet18
+        net = PreActResNet18(num_classes=num_class).to(device)
+    elif name == "rnp":
+        from classifier_models.resnet_cifar import resnet18
+        net = resnet18(num_classes=num_class).to(device)
+    elif name == "convnext2":
+        from classifier_models.convnext2 import convnextv2_huge
+        net = convnextv2_huge(num_classes=num_class)
     else:
         raise NotImplementedError(name)
     return net

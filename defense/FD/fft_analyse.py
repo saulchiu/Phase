@@ -1,6 +1,6 @@
 import sys
 
-sys.path.append('../')
+sys.path.append('../../')
 from tools.img import tensor2ndarray, rgb2yuv, yuv2rgb, plot_space_target_space, dct_2d_3c_slide_window, dct_2d_3c_full_scale
 from tools.dataset import get_dataloader, get_de_normalization, get_dataset_class_and_scale
 # from tools.inject_backdoor import patch_trigger

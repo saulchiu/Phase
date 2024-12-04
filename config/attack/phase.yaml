@@ -3,7 +3,7 @@ mode: train
 ch_list: [1]
 window_size: 4
 trigger_size: 2
-phase_trigger: 1
+phase_trigger: -1
 dwt_level: 1
 dwt_wave: 'db2'
 LL: 1
@@ -12,4 +12,4 @@ HL: 0
 HH: 0
 # mix=0: mix real part; mix=1: mix amplitude.
 mix: -1
-enhance: 0.01
+enhance: 1e-3

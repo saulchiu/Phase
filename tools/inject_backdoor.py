@@ -8,7 +8,10 @@ import cv2
 import numpy
 import numpy as np
 
-sys.path.append('../')
+import os
+CWD = os.getcwd()
+REPO_ROOT = CWD.split('INBA')[0] + "INBA/"
+sys.path.append(REPO_ROOT)
 from tools.img import rgb2yuv, yuv2rgb, tensor2ndarray, ndarray2tensor, dct_2d_3c_slide_window, idct_2d_3c_slide_window, \
     idct_2d_3c_slide_window, dct_2d_3c_slide_window, fft_2d_3c, ifft_2d_3c
 from tools.ctrl_transform import ctrl
@@ -88,22 +91,6 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_idct = idct_2d_3c_slide_window(x_dct, window_size)
         x_idct = yuv2rgb(x_idct)
         x_p = ndarray2tensor(x_idct)
-    elif attack_name == 'lf':  # low frequency
-        dataset_name = 'cifar10'
-        model_name = 'preactresnet18'
-        resource_path = f"../resource/lowFrequency/{dataset_name}_{model_name}_0_255.npy"
-        trigger_array = np.load(resource_path)
-        if len(trigger_array.shape) == 4:
-            trigger_array = trigger_array[0]
-        elif len(trigger_array.shape) == 3:
-            pass
-        elif len(trigger_array.shape) == 2:
-            trigger_array = np.stack((trigger_array,) * 3, axis=-1)
-        else:
-            raise ValueError("lowFrequency trigger shape error, should be either 2 or 3 or 4")
-        x_0 = tensor2ndarray(x_0)
-        np.clip(x_0.astype(float) + trigger_array, 0, 255).astype(np.uint8)
-        x_p = ndarray2tensor(x_0)
     elif attack_name == 'wanet':  # num_workers should be 1!
         def get_wanet_grid(image_size, grid_path: str, s: float, device='cpu'):
             grid = torch.load(grid_path)
@@ -143,25 +130,10 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_0 = F.grid_sample(x_0, grid_temps.repeat(1, 1, 1, 1), align_corners=True)
         x_0 = x_0.squeeze()
         x_p = x_0
-    elif attack_name == 'ctrl':
-        class Args:
-            pass
-
-        args = Args()
-        args.__dict__ = {
-            "img_size": (x_0.shape[1], x_0.shape[1], 3),
-            "use_dct": False,
-            "use_yuv": True,
-            "pos_list": [15, 31],
-            "trigger_channels": (1, 2),
-        }
-        bad_transform = ctrl(args, False)
-        x_0 = bad_transform(Image.fromarray(tensor2ndarray(x_0)), 1)
-        x_p = trans(x_0)
     elif attack_name == 'duba':
         # x_c = tensor2ndarray(x_0) / 255.  # scale to 0~1
         x_c = tensor2ndarray(x_0)
-        x_p_img = PIL.Image.open('../resource/DUBA/64.png')
+        x_p_img = PIL.Image.open(f'{REPO_ROOT}/resource/DUBA/64.png')
         wave = 'db2'
         alpha = beta = config.attack.alpha
 
@@ -216,6 +188,39 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_re[x_c <= 30] = x_c[x_c <= 30]
         x_re = x_re.astype(np.float32)
         x_p = ndarray2tensor(x_re)
+    elif attack_name == 'fiba':
+        img_ = tensor2ndarray(x_0)
+        target_img = PIL.Image.open(config.attack.tg_path)
+        target_img = target_img.resize((h, w))
+        target_img=np.asarray(target_img)
+        #  get the amplitude and phase spectrum of trigger image
+        fft_trg_cp = np.fft.fft2(target_img, axes=(-3, -2))
+        amp_target, pha_target = np.abs(fft_trg_cp), np.angle(fft_trg_cp)
+        amp_target_shift = np.fft.fftshift(amp_target, axes=(-3, -2))
+        #  get the amplitude and phase spectrum of source image
+        fft_source_cp = np.fft.fft2(img_, axes=(-3, -2))
+        amp_source, pha_source = np.abs(fft_source_cp), np.angle(fft_source_cp)
+        amp_source_shift = np.fft.fftshift(amp_source, axes=(-3, -2))
+        # swap the amplitude part of local image with target amplitude spectrum
+        c, h, w = img_.shape
+        b = (np.floor(np.amin((h, w)) * config.attack.beta)).astype(int)
+        c_h = np.floor(h / 2.0).astype(int)
+        c_w = np.floor(w / 2.0).astype(int)
+
+        h1 = c_h - b
+        h2 = c_h + b + 1
+        w1 = c_w - b
+        w2 = c_w + b + 1
+
+        amp_source_shift[:, h1:h2, w1:w2] = amp_source_shift[:, h1:h2, w1:w2] * (1 - config.attack.alpha) + (amp_target_shift[:,h1:h2, w1:w2]) * config.attack.alpha
+        # IFFT
+        amp_source_shift = np.fft.ifftshift(amp_source_shift, axes=(-3, -2))
+
+        # get transformed image via inverse fft
+        fft_local_ = amp_source_shift * np.exp(1j * pha_source)
+        local_in_trg = np.fft.ifft2(fft_local_, axes=(-3, -2))
+        local_in_trg = np.real(local_in_trg)
+        x_p = ndarray2tensor(local_in_trg)
     elif attack_name == 'phase':
         # ld = torch.load(f'{config.path}/trigger.pth')
         # u_tg = ld['u_tg'].to(device)
@@ -267,6 +272,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
 
         # mix real part or amplitude
         if config.attack.mix == 1:  # mix amplitude
+            mix_coe = 0.5
             x_c = x_0.clone()
             x_c_fft = torch.fft.fft2(x_c, dim=(1, 2))
             x_p_fft = torch.fft.fft2(x_p, dim=(1, 2))
@@ -290,6 +296,7 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             raise NotImplementedError(f'Valid Mix Mode: {config.attack.mix}.')
     else:
         raise NotImplementedError(attack_name)
+    x_p = x_p.to(x_0.dtype)
     x_p = x_p.to(x_0.device)
     x_p.clip_(0, 1)
     return x_p

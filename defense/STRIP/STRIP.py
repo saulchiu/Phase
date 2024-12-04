@@ -13,6 +13,7 @@ from tools.dataset import get_dataset_class_and_scale, get_dataloader, get_de_no
 from omegaconf import OmegaConf
 # from tools.inject_backdoor import patch_trigger
 from tools.img import tensor2ndarray, ndarray2tensor
+import matplotlib.pylab as plt
 
 
 
@@ -92,8 +93,6 @@ class STRIP:
         index_overlay = np.random.randint(0, len(dataset), size=self.n_sample)
         for index in range(self.n_sample):
             ele = dataset[index_overlay[index]][0]
-            # print(type(background))
-            # print(type(ele))
             add_image = self._superimpose(background, ele)
             add_image = self.normalize(add_image)
             x1_add[index] = add_image
@@ -186,14 +185,14 @@ def strip(opt, mode="clean"):
     list_entropy_trojan = []
     list_entropy_benign = []
 
-    denormalizer = get_de_normalization(opt.dataset)
+    de_norm = get_de_normalization(config.dataset_name)
     do_norm = get_dataset_normalization(config.dataset_name)
 
     if mode == "attack":
         # Testing with perturbed data
         print("Testing with bd data !!!!")
         inputs, targets = next(iter(test_dataloader))
-        inputs = denormalizer(inputs)
+        inputs = de_norm(inputs)
         bd_inputs = []
         for i in range(inputs.shape[0]):
             p = patch_trigger(inputs[i], config)
@@ -281,6 +280,24 @@ def main():
         print("A backdoored model\n")
     else:
         print("Not a backdoor model\n")
+
+
+    N = len(lists_entropy_benign)
+    bins_sturges = int(np.ceil(np.log2(N) + 1))  # Sturges' Rule
+    bins_rice = int(np.ceil(2 * (N ** (1 / 3))))  # Rice Rule
+    bins = bins_rice
+    plt.hist(lists_entropy_benign, bins, weights=np.ones(len(lists_entropy_benign)) / len(lists_entropy_benign), alpha=1, label='without trojan')
+    plt.hist(lists_entropy_trojan, bins, weights=np.ones(len(lists_entropy_trojan)) / len(lists_entropy_trojan), alpha=1, label='with trojan')
+    plt.legend(loc='upper right', fontsize = 20)
+    plt.ylabel('Probability (%)', fontsize = 20)
+    plt.title('normalized entropy', fontsize = 20)
+    plt.tick_params(labelsize=20)
+
+    fig1 = plt.gcf()
+    plt.show()
+    # fig1.savefig('EntropyDNNDist_T2.pdf')# save the fig as pdf file
+    fig1.savefig(f'{opt.path}/STRIP/Entropy.png')# save the fig as pdf file
+     
 
 
 if __name__ == "__main__":

@@ -308,6 +308,7 @@ bad_test_loader = DataLoader(bad_test_ds, config.batch, False, num_workers=4, dr
 
 model = net
 poison_test_loader = bad_test_loader
+args.poison_type = config.attack.name
 
 
 ##############
@@ -379,6 +380,8 @@ if os.path.exists(os.path.join(args.output_dir,save_file)):
     trace =  np.load(os.path.join(args.output_dir, save_file))['trace']
 
 else:
+    if config.model == "repvgg":
+        net.deploy =True
     model.eval()
     if batch_num == 1:
         hessian_comp = hessian(model,

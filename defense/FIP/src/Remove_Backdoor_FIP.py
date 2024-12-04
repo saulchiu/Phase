@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import random 
 from Regularizer import CDA_Regularizer as regularizer   ## Regularizer 
 import torch.autograd as AG
+import sys
 
 
 def main(parser, transform_train, transform_test):
@@ -137,9 +138,7 @@ def main(parser, transform_train, transform_test):
     """
     My Modify
     """
-
-    import sys
-    sys.path.append('/home/chengyiqiu/code/INBA/')
+    sys.path.append('../../../')
     from tools.dataset import get_dataloader, get_dataset_class_and_scale, get_train_and_test_dataset, PoisonDataset, PartialDataset
     from omegaconf import OmegaConf
     from tools.utils import manual_seed, get_model, rm_if_exist
@@ -164,6 +163,7 @@ def main(parser, transform_train, transform_test):
         net.deploy =True
 
     _, clean_test_loader = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
+    args.poison_type = config.attack.name
 
     train_ds, test_ds = get_train_and_test_dataset(config.dataset_name)
     poison_config = config.copy()
@@ -340,7 +340,7 @@ if __name__ == '__main__':
     parser.add_argument('--output-dir', type=str, default='save/purified_networks/')
     parser.add_argument('--gpuid', type=int, default=0, help='the transparency of the trigger pattern.')
 
-    parser.add_argument('--poison-type', type=str, default='badnets', choices=['badnets', 'Feature', 'FC',  'SIG', 'Dynamic', 'TrojanNet', 'blend', 'CLB', 'benign'],
+    parser.add_argument('--poison-type', type=str, default='badnets',
                         help='type of backdoor attacks used during training')
     parser.add_argument('--trigger-alpha', type=float, default=0.2, help='the transparency of the trigger pattern.')
 

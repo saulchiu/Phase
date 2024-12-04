@@ -124,16 +124,16 @@ class PoisonDataset(Dataset):
         do_poison = (random.random() < self.config.ratio) and self.config.attack.name != 'benign'
         if do_poison:
             # enhance
-            if self.config.attack.mode == "train" and self.config.attack.name == 'inba' and random.random() < 0.1:
-                x = self.de_norm(x).squeeze()
-                x_p = self.transform(x)
-                # x_p.clip_(0, 1)
-                x_e = self.do_norm(x_p) + self.config.attack.enhance * torch.rand_like(x_p, device=x_p.device)
-                return x_e, y            
+            # if self.config.attack.mode == "train" and self.config.attack.name == 'inba' and random.random() < 0.1:
+            #     x = self.de_norm(x).squeeze()
+            #     x_p = self.transform(x)
+            #     x_p.clip_(0, 1)
+            #     x_e = self.do_norm(x_p) + self.config.attack.enhance * (torch.rand_like(x_p, device=x_p.device))
+            #     return x_e, y            
             # poisoned
             x = self.de_norm(x).squeeze()
             x_p = self.transform(x)
-            # x_p.clip_(0, 1)
+            x_p.clip_(0, 1)
             x_p = self.do_norm(x_p)
             x = x_p
             y = y - y + self.config.target_label
