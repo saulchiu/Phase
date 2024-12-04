@@ -1,14 +1,32 @@
-# FBA
+Attack Baselines: **BadNets, Blend, WaNet, FTrojan, FIBA, DUBA**
 
-A invisible backdoor attack in both Spatial and Frequency domains.
+Defense Baselines: **GradCam, NC, FIP, RNP, FIP, CLP, FP**
 
-Our attack baseline: BadNet, Blended, FTrojan, WaNet, DUBA
+Train a backdoored model from stratch:
+```shell
+cd run
+python train.py attack=phase dataset_name=cifar10 model=resnet18
+```
 
-Our defence baseline: to be released later
+Eval the ACC, ASR of the trained model:
+```shell
+cd run
+python eval_acc.py --path /home/chengyiqiu/code/INBA/results/cifar10/inba/20241124165116_robust_training
+```
 
-# hyper-parameter
+Eval the SSIM... of the trained model:
+```shell
+cd run
+python eval_ssim.py --path /home/chengyiqiu/code/INBA/results/cifar10/inba/20241124165116_robust_training
+```
 
-- For scale 32 (CIFAR10, FTSRB), set trigger size 14.
-- For scale 128 (CelebA), set trigger size 54.
-- For scale 224 (Imagenette), set trigger size 80.
+Test NC on your trained model:
+```shell
+cd defense/NC
+python nc.py --path /home/chengyiqiu/code/INBA/results/cifar10/phase/resnet18/20241204184214 
+```
 
+# TO-Do
+- Release the config details of training: Yes.
+- Release the pre-train model: No
+- Tiny the code: No

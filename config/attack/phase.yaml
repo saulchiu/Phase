@@ -9,7 +9,7 @@ dwt_wave: 'db2'
 LL: 1
 LH: 0
 HL: 0
-HH: 0
-# mix=0: mix real part; mix=1: mix amplitude.
+HH: 1
 mix: -1
-enhance: 1e-3
+mask_coef: 0.3
+enhance: 0.05

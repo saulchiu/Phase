@@ -103,12 +103,19 @@ class PreActResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
+        # out_list = []
         out = self.conv1(x)
+        # out_list.append(out)
         out = self.layer1(out)
+        # out_list.append(out)
         out = self.layer2(out)
+        # out_list.append(out)
         out = self.layer3(out)
+        # out_list.append(out)
         out = self.layer4(out)
+        # out_list.append(out)
         out = self.avgpool(out)
+        # out_list.append(out)
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out

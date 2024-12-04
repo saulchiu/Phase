@@ -180,13 +180,15 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_re_dct_1 = lamb * x_re_dct_1 + (1 - lamb) * x_c_dct_1
         x_re = idct_2d_3c_slide_window(x_re_dct_1)
 
-        # x_re = np.clip(x_re, 0, 1)
-        # mask trigger
-        # x_re *= 255.
-        # x_c *= 255.
-        x_re[x_c >= 220] = x_c [x_c >= 220]
-        x_re[x_c <= 30] = x_c[x_c <= 30]
-        x_re = x_re.astype(np.float32)
+        # mask 
+        if config.attack.mode == 'train':
+            x_re[x_c >= 220] = x_c [x_c >= 220]
+            x_re[x_c <= 30] = x_c[x_c <= 30]
+            x_re = x_re.astype(np.float32)
+        else:
+            x_re[x_c >= 245] = x_c [x_c >= 245]
+            x_re[x_c <= 5] = x_c[x_c <= 5]
+            x_re = x_re.astype(np.float32)
         x_p = ndarray2tensor(x_re)
     elif attack_name == 'fiba':
         img_ = tensor2ndarray(x_0)
@@ -222,10 +224,6 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         local_in_trg = np.real(local_in_trg)
         x_p = ndarray2tensor(local_in_trg)
     elif attack_name == 'phase':
-        # ld = torch.load(f'{config.path}/trigger.pth')
-        # u_tg = ld['u_tg'].to(device)
-        # v_tg = ld['v_tg'].to(device)
-
         x_p = x_0.clone()
         ch_list = config.attack.ch_list
         window_size = config.attack.window_size
@@ -241,29 +239,29 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             # poison HH
             if config.attack.HH == 1:
                 HH_yuv = np.stack(rgb_to_yuv(HH[:,:,0], HH[:,:,1], HH[:,:,2]), axis=-1)
-                HH_yuv = inject_trigger(HH_yuv, window_size, window_size, phase_trigger, ch_list)
+                HH_yuv = inject_trigger(HH_yuv, window_size, trigger_size, phase_trigger, ch_list, config.attack.mode)
                 HH = np.stack(yuv_to_rgb(HH_yuv[:,:,0], HH_yuv[:,:,1], HH_yuv[:,:,2]), axis=-1)
             # poison HL
             if config.attack.HL == 1:
                 HL_yuv = np.stack(rgb_to_yuv(HL[:,:,0], HL[:,:,1], HL[:,:,2]), axis=-1)
-                HL_yuv = inject_trigger(HL_yuv, window_size, trigger_size, phase_trigger)
+                HL_yuv = inject_trigger(HL_yuv, window_size, trigger_size, phase_trigger, ch_list, config.attack.mode)
                 HL = np.stack(yuv_to_rgb(HL_yuv[:,:,0], HL_yuv[:,:,1], HL_yuv[:,:,2]), axis=-1) 
             # poison LH
             if config.attack.LH == 1:
                 LH_yuv = np.stack(rgb_to_yuv(LH[:,:,0], LH[:,:,1], LH[:,:,2]), axis=-1)
-                LH_yuv = inject_trigger(LH_yuv, window_size, trigger_size, phase_trigger)
+                LH_yuv = inject_trigger(LH_yuv, window_size, trigger_size, phase_trigger, ch_list, config.attack.mode)
                 LH = np.stack(yuv_to_rgb(LH_yuv[:,:,0], LH_yuv[:,:,1], LH_yuv[:,:,2]), axis=-1) 
             # poison LL
             if config.attack.LL == 1:
                 LL_yuv = np.stack(rgb_to_yuv(LL[:,:,0], LL[:,:,1], LL[:,:,2]), axis=-1)
-                LL_yuv = inject_trigger(LL_yuv.copy(), window_size, trigger_size, phase_trigger, ch_list)
+                LL_yuv = inject_trigger(LL_yuv, window_size, trigger_size, phase_trigger, ch_list, config.attack.mode)
                 LL = np.stack(yuv_to_rgb(LL_yuv[:,:,0], LL_yuv[:,:,1], LL_yuv[:,:,2]), axis=-1) 
             coeff[0] = LL
             coeff[-1] = (LH, HL, HH)
             x_p = pywt.waverec2(coeff, wavelet=wave, axes=(0, 1))
         else:
             x_p_yuv = np.stack(rgb_to_yuv(x_p[:,:,0], x_p[:,:,1], x_p[:,:,2]), axis=-1)
-            x_p_yuv = inject_trigger(x_p_yuv, window_size, trigger_size, phase_trigger)
+            x_p_yuv = inject_trigger(x_p_yuv, window_size, trigger_size, phase_trigger, ch_list, config.attack.mode)
             x_p = np.stack(yuv_to_rgb(x_p_yuv[:,:,0], x_p_yuv[:,:,1], x_p_yuv[:,:,2]), axis=-1) 
         
         x_p = ndarray2tensor(x_p)
@@ -294,11 +292,16 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             pass
         else:
             raise NotImplementedError(f'Valid Mix Mode: {config.attack.mix}.')
+        x_p = x_p.to(x_0.dtype)
+        x_p = x_p.to(x_0.device)
+        if config.attack.mode == 'train':
+            tg = x_p - x_0
+            tg = zero_out_tensor(tg, config.attack.mask_coef)
+            x_p = x_0 + tg
     else:
         raise NotImplementedError(attack_name)
     x_p = x_p.to(x_0.dtype)
     x_p = x_p.to(x_0.device)
-    x_p.clip_(0, 1)
     return x_p
 
 
@@ -315,7 +318,7 @@ def inplant_phase_trigger(target, window_size, trigger_size, phase_trigger, ch_l
     for ch in ch_list:
         for i in range(0, target.shape[0], window_size):
             for j in range(0, target.shape[1], window_size):
-                # if random.random() < 0.2:
+                # if mode == 'train' and random.random() < 0.5:
                 #      pass
                 tmp = target[i:i+window_size, j:j+window_size, ch]
                 tmp_fft = np.fft.fft2(tmp, axes=(0, 1))
@@ -340,3 +343,10 @@ def inplant_imaginary_part_trigger(target, window_size, trigger_size, phase_trig
                 tmp = tmp.real
                 target[i:i+window_size, j:j+window_size, ch] = tmp
     return target
+
+def zero_out_tensor(tensor, ratio):
+    size = tensor.numel()
+    num_zero = int(size * ratio)
+    indices = torch.randperm(size)[:num_zero]
+    tensor.reshape(-1)[indices] = 0
+    return tensor
