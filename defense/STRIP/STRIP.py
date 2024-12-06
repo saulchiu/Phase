@@ -14,6 +14,8 @@ from omegaconf import OmegaConf
 # from tools.inject_backdoor import patch_trigger
 from tools.img import tensor2ndarray, ndarray2tensor
 import matplotlib.pylab as plt
+from tqdm import tqdm
+from matplotlib.font_manager import FontProperties
 
 
 
@@ -49,35 +51,6 @@ def get_argument():
 
     return parser
 
-
-class Normalize:
-    def __init__(self, opt, expected_values, variance):
-        self.n_channels = opt.input_channel
-        self.expected_values = expected_values
-        self.variance = variance
-        assert self.n_channels == len(self.expected_values)
-
-    def __call__(self, x):
-        x_clone = x.clone()
-        for channel in range(self.n_channels):
-            x_clone[:, :, channel] = (x[:, :, channel] - self.expected_values[channel]) / self.variance[channel]
-        return x_clone
-
-
-class Denormalize:
-    def __init__(self, opt, expected_values, variance):
-        self.n_channels = opt.input_channel
-        self.expected_values = expected_values
-        self.variance = variance
-        assert self.n_channels == len(self.expected_values)
-
-    def __call__(self, x):
-        x_clone = x.clone()
-        for channel in range(self.n_channels):
-            x_clone[:, :, channel] = x[:, :, channel] * self.variance[channel] + self.expected_values[channel]
-        return x_clone
-
-
 class STRIP:
     def _superimpose(self, background, overlay):
         background = tensor2ndarray(background)
@@ -94,7 +67,7 @@ class STRIP:
         for index in range(self.n_sample):
             ele = dataset[index_overlay[index]][0]
             add_image = self._superimpose(background, ele)
-            add_image = self.normalize(add_image)
+            add_image = ndarray2tensor(add_image)
             x1_add[index] = add_image
 
         py1_add = classifier(torch.stack(x1_add).to(self.device))
@@ -102,82 +75,16 @@ class STRIP:
         entropy_sum = -np.nansum(py1_add * np.log2(py1_add))
         return entropy_sum / self.n_sample
 
-    def _get_denormalize(self, opt):
-        if opt.dataset == "cifar10":
-            denormalizer = Denormalize(opt, [0.4914, 0.4822, 0.4465], [0.247, 0.243, 0.261])
-        elif opt.dataset == "mnist":
-            denormalizer = Denormalize(opt, [0.5], [0.5])
-        elif opt.dataset == "gtsrb" or opt.dataset == "celeba":
-            denormalizer = None
-        else:
-            raise Exception("Invalid dataset")
-        return denormalizer
-
-    def _get_normalize(self, opt):
-        if opt.dataset == "cifar10":
-            normalizer = Normalize(opt, [0.4914, 0.4822, 0.4465], [0.247, 0.243, 0.261])
-        elif opt.dataset == "mnist":
-            normalizer = Normalize(opt, [0.5], [0.5])
-        elif opt.dataset == "gtsrb" or opt.dataset == "celeba":
-            normalizer = None
-        else:
-            raise Exception("Invalid dataset")
-        if normalizer:
-            transform = transforms.Compose([transforms.ToTensor(), normalizer])
-        else:
-            transform = transforms.ToTensor()
-        return transform
-
     def __init__(self, opt):
         super().__init__()
         self.n_sample = opt.n_sample
-        self.normalizer = self._get_normalize(opt)
-        self.denormalizer = self._get_denormalize(opt)
         self.device = opt.device
 
-    def normalize(self, x):
-        if self.normalizer:
-            x = self.normalizer(x)
-        return x
-
-    def denormalize(self, x):
-        if self.denormalizer:
-            x = self.denormalizer(x)
-        return x
 
     def __call__(self, background, dataset, classifier):
         return self._get_entropy(background, dataset, classifier)
 
-
-def create_backdoor(inputs, identity_grid, noise_grid, opt):
-    bs = inputs.shape[0]
-    grid_temps = (identity_grid + opt.s * noise_grid / opt.input_height) * opt.grid_rescale
-    grid_temps = torch.clamp(grid_temps, -1, 1)
-
-    bd_inputs = F.grid_sample(inputs, grid_temps.repeat(bs, 1, 1, 1), align_corners=True)
-    return bd_inputs
-
-
-def strip(opt, mode="clean"):
-    target_folder = opt.path
-    sys.path.append('./run')
-    sys.path.append(target_folder)
-    from inject_backdoor import patch_trigger
-    path = f'{target_folder}/config.yaml'
-    config = OmegaConf.load(path)
-    manual_seed(config.seed)
-    device = f'cuda:{config.device}'
-    num_class, scale = get_dataset_class_and_scale(config.dataset_name)
-    net = get_model(config.model, num_class, device=device)
-    ld = torch.load(f'{target_folder}/results.pth', map_location=device)
-    net.load_state_dict(ld['model'])
-    net.to(device)
-    if config.model == "repvgg":
-        net.deploy =True
-    _, test_dataloader = get_dataloader(config.dataset_name, 1024, config.pin_memory, config.num_workers)
-    testset = test_dataloader.dataset
-    netC = net
-
+def strip(opt, config, test_dataloader, patch_trigger, testset, netC):
     # STRIP detector
     strip_detector = STRIP(opt)
 
@@ -188,9 +95,11 @@ def strip(opt, mode="clean"):
     de_norm = get_de_normalization(config.dataset_name)
     do_norm = get_dataset_normalization(config.dataset_name)
 
+    mode = 'clean' if config.attack.name == "benign" else 'attack'
+
     if mode == "attack":
         # Testing with perturbed data
-        print("Testing with bd data !!!!")
+        # print("Testing with bd data !!!!")
         inputs, targets = next(iter(test_dataloader))
         inputs = de_norm(inputs)
         bd_inputs = []
@@ -232,25 +141,33 @@ def main():
     opt.input_channel = 3
     opt.num_classes = num_class
 
-    if "2" in opt.attack_mode:
-        mode = "attack"
-    else:
-        mode = "clean"
+    target_folder = opt.path
+    sys.path.append('./run')
+    sys.path.append(target_folder)
+    from inject_backdoor import patch_trigger
+    path = f'{target_folder}/config.yaml'
+    config = OmegaConf.load(path)
+    manual_seed(config.seed)
+    device = f'cuda:{config.device}'
+    num_class, scale = get_dataset_class_and_scale(config.dataset_name)
+    net = get_model(config.model, num_class, device=device)
+    ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+    net.load_state_dict(ld['model'])
+    net.to(device)
+    if config.model == "repvgg":
+        net.deploy =True
+    _, test_dataloader = get_dataloader(config.dataset_name, 1024, config.pin_memory, config.num_workers)
+    testset = test_dataloader.dataset
+    netC = net
 
     lists_entropy_trojan = []
     lists_entropy_benign = []
-    for test_round in range(opt.test_rounds):
-        list_entropy_trojan, list_entropy_benign = strip(opt, mode)
+    for _ in tqdm(range(opt.test_rounds)):
+        list_entropy_trojan, list_entropy_benign = strip(opt, config, test_dataloader, patch_trigger, testset, netC)
         lists_entropy_trojan += list_entropy_trojan
         lists_entropy_benign += list_entropy_benign
 
     # Save result to file
-    result_dir = os.path.join(opt.results, opt.dataset)
-    if not os.path.exists(result_dir):
-        os.makedirs(result_dir)
-    result_path = os.path.join(result_dir, opt.attack_mode)
-    if not os.path.exists(result_path):
-        os.makedirs(result_path)
     result_path = os.path.join("{}_{}_output.txt".format(opt.dataset, opt.attack_mode))
     result_path = f'{opt.path}/STRIP/{result_path}'
 
@@ -281,24 +198,41 @@ def main():
     else:
         print("Not a backdoor model\n")
 
+    print(f'min benign: {min(lists_entropy_benign)}, len: {len(lists_entropy_benign)}')
+    print(f'min trojaned: {min(lists_entropy_trojan)}, len: {len(lists_entropy_trojan)}')
+
+    # 设置字体为Calibri
+    font = FontProperties(fname='/home/chengyiqiu/code/INBA/resource/Fonts', size=20)
+
+    # 假设 lists_entropy_benign 和 lists_entropy_trojan 已经被定义并包含数据
 
     N = len(lists_entropy_benign)
     bins_sturges = int(np.ceil(np.log2(N) + 1))  # Sturges' Rule
     bins_rice = int(np.ceil(2 * (N ** (1 / 3))))  # Rice Rule
+
     bins = bins_rice
-    plt.hist(lists_entropy_benign, bins, weights=np.ones(len(lists_entropy_benign)) / len(lists_entropy_benign), alpha=1, label='without trojan')
-    plt.hist(lists_entropy_trojan, bins, weights=np.ones(len(lists_entropy_trojan)) / len(lists_entropy_trojan), alpha=1, label='with trojan')
-    plt.legend(loc='upper right', fontsize = 20)
-    plt.ylabel('Probability (%)', fontsize = 20)
-    plt.title('normalized entropy', fontsize = 20)
+    alpha = 0.9  # 设置透明度
+    rwidth = 0.9  # 设置柱子的相对宽度，小于1会在柱子之间创建间隔
+
+    # 绘制直方图
+    plt.hist(lists_entropy_benign, bins=bins, weights=np.ones(len(lists_entropy_benign)) / len(lists_entropy_benign), alpha=alpha, label='without trojan', rwidth=rwidth)
+    plt.hist(lists_entropy_trojan, bins=bins, weights=np.ones(len(lists_entropy_trojan)) / len(lists_entropy_trojan), alpha=alpha, label='with trojan', rwidth=rwidth)
+
+    # 设置图例、轴标签和标题
+    # plt.legend(loc='upper right', prop=font)
+    plt.xlabel('Entropy', fontproperties=font)
+    plt.ylabel('Probability', fontproperties=font)
+    plt.title('Normalized Entropy', fontproperties=font)
     plt.tick_params(labelsize=20)
 
-    fig1 = plt.gcf()
-    plt.show()
-    # fig1.savefig('EntropyDNNDist_T2.pdf')# save the fig as pdf file
-    fig1.savefig(f'{opt.path}/STRIP/Entropy.png')# save the fig as pdf file
-     
+    plt.tight_layout()
 
+    # 保存图像
+    fig1 = plt.gcf()
+    fig1.savefig(f'{opt.path}/STRIP/Entropy.png', dpi=500)
+
+    # 显示图形
+    plt.show()
 
 if __name__ == "__main__":
     main()

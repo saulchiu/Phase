@@ -403,6 +403,8 @@ else:
 ## Save the statistics in a numpy file
 np.savez(os.path.join(args.output_dir,save_file), density_eigen = density_eigen, weight = density_weight, eignevalues = np.mean(np.array(top_eigenvalues)), trace=np.mean(trace))
 
+args.mode = 'clean' if config.attack == "benign" else "Trojan"
+
 print('\n***Top Eigenvalue: ', top_eigenvalues)
 print('\n***Trace of Hessian: ', np.mean(trace))
 get_esd_plot(density_eigen, density_weight, np.mean(np.array(top_eigenvalues)), np.mean(trace), args.ACC, args.ASR , args.mode, args.output_dir, 'Eigen_')
