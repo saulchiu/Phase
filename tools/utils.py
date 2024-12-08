@@ -77,9 +77,13 @@ def get_model(name, num_class, device):
                         num_blocks_list = [2, 2, 2, 2],
                         kernel_size=7, patch_size=1,
                         res_p_drop=0.)
+    elif name == "repvit":
+        from classifier_models.repvit import repvit_m1_0
+        net = repvit_m1_0(num_classes = num_class)
     elif name == "repvgg":
         from repvgg_pytorch.repvgg import RepVGG
         net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device)
+        # net = RepVGG(num_blocks=[4, 6, 16, 1], num_classes=num_class, width_multiplier=[2, 2, 2, 4]).to(device)
     elif name == "presnet18":
         print(sys.path)
         from classifier_models.preact_resnet import PreActResNet18

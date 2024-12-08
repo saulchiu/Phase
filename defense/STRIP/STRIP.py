@@ -202,7 +202,7 @@ def main():
     print(f'min trojaned: {min(lists_entropy_trojan)}, len: {len(lists_entropy_trojan)}')
 
     # 设置字体为Calibri
-    font = FontProperties(fname='/home/chengyiqiu/code/INBA/resource/Fonts', size=20)
+    font = FontProperties(fname='/home/chengyiqiu/code/INBA/resource/Fonts/Calibri.ttf', size=20)
 
     # 假设 lists_entropy_benign 和 lists_entropy_trojan 已经被定义并包含数据
 
