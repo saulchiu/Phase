@@ -79,8 +79,12 @@ def get_model(name, num_class, device):
                         res_p_drop=0.)
     elif name == "repvit":
         # lr=1e-3 weight_decay=0.025
-        from classifier_models.repvit import repvit_m1_5 as RepViT
+        from classifier_models.repvit import repvit_m1_0 as RepViT
         net = RepViT(num_classes = num_class)
+    elif name == 'rdnet':
+        # lr=1e-3 weight_decay=0.05
+        from classifier_models.rdnet import rdnet_large as RDNet
+        net = RDNet(num_classes = num_class)
     elif name == "repvgg":
         from repvgg_pytorch.repvgg import RepVGG
         net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device)
