@@ -11,5 +11,5 @@ LH: 0
 HL: 0
 HH: 1
 mix: -1
-mask_coef: 0.4
+mask_coef: 0.2
 enhance: 0.05

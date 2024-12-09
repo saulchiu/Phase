@@ -78,8 +78,9 @@ def get_model(name, num_class, device):
                         kernel_size=7, patch_size=1,
                         res_p_drop=0.)
     elif name == "repvit":
-        from classifier_models.repvit import repvit_m1_0
-        net = repvit_m1_0(num_classes = num_class)
+        # lr=1e-3 weight_decay=0.025
+        from classifier_models.repvit import repvit_m1_5 as RepViT
+        net = RepViT(num_classes = num_class)
     elif name == "repvgg":
         from repvgg_pytorch.repvgg import RepVGG
         net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device)
