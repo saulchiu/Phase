@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import os
 from tools.dataset import get_dataset_class_and_scale
 import math
+from scipy import stats
 
 def get_optimizer(model, learning_rate, weight_decay):
     param_dict = {pn: p for pn, p in model.named_parameters()}
@@ -44,7 +45,6 @@ def visualize_metrics(metrics_list, target_folder):
     ax2.legend(loc='upper right')
     plt.savefig(f"{target_folder}/metrics_plot.png")
     plt.close()
-
 
 class BASELightningModule(L.LightningModule):
     def __init__(self, model, config):

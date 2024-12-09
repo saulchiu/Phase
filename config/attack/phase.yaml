@@ -9,7 +9,7 @@ dwt_wave: 'db2'
 LL: 1
 LH: 0
 HL: 0
-HH: 0
+HH: 1
 mix: -1
 mask_coef: 0.4
 enhance: 0.05

@@ -81,14 +81,6 @@ def get_model(name, num_class, device):
         # lr=1e-3 weight_decay=0.025
         from classifier_models.repvit import repvit_m1_0 as RepViT
         net = RepViT(num_classes = num_class)
-    elif name == 'rdnet':
-        # lr=1e-3 weight_decay=0.05
-        from classifier_models.rdnet import rdnet_large as RDNet
-        net = RDNet(num_classes = num_class)
-    elif name == "repvgg":
-        from repvgg_pytorch.repvgg import RepVGG
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_class, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device)
-        # net = RepVGG(num_blocks=[4, 6, 16, 1], num_classes=num_class, width_multiplier=[2, 2, 2, 4]).to(device)
     elif name == "presnet18":
         print(sys.path)
         from classifier_models.preact_resnet import PreActResNet18
@@ -96,9 +88,6 @@ def get_model(name, num_class, device):
     elif name == "rnp":
         from classifier_models.resnet_cifar import resnet18
         net = resnet18(num_classes=num_class).to(device)
-    elif name == "convnext2":
-        from classifier_models.convnext2 import convnextv2_huge
-        net = convnextv2_huge(num_classes=num_class)
     else:
         raise NotImplementedError(name)
     return net
