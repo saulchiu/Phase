@@ -4,7 +4,7 @@ data/
 */lightning_logs
 .idea/
 run/outputs/
-results/
+results*/
 */outputs
 .DS_Store
 .cadence

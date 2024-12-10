@@ -129,8 +129,8 @@ class PoisonDataset(Dataset):
                 if self.config.attack.name == 'badnet':
                     _, h, w = x.shape
                     mask = PIL.Image.open(f'{self.config.attack.tg_path}/mask_{h}_{int(h / 10)}.png')
-                    mask = mask.resize(h, w)
-                    mask = ToTensor(mask)
+                    mask = mask.resize((h, w))
+                    mask = ToTensor()(mask)
                     x = self.de_norm(x).squeeze()
                     x_p = self.transform(x)
                     x_p.clip_(0, 1)
