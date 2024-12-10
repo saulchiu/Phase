@@ -28,7 +28,6 @@ import random
 import math
 import pywt
 
-
 class BadTransform(object):
     def __init__(self, config) -> None:
         self.config = config
@@ -37,7 +36,6 @@ class BadTransform(object):
         # Attacker should decide whether apply normalization in somethere outside this function.
         x_p = patch_trigger(x_c, self.config)
         return x_p
-
 
 def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
     """

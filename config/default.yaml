@@ -18,5 +18,8 @@ seed: 42
 val_epoch: 1
 # ema_update_every: 100
 
+# enhanced training
+enhance: 0.05
+
 defaults:
   - attack: inba

@@ -2,6 +2,7 @@ import sys
 REPO_ROOT='/home/chengyiqiu/code/INBA/'
 DATA_PATH = f'{REPO_ROOT}/data'
 sys.path.append('../')
+import PIL.Image
 from torchvision.transforms.transforms import Compose, ToTensor, Resize, Normalize, RandomCrop, RandomHorizontalFlip
 from torch.utils.data.dataloader import DataLoader
 import torchvision
@@ -9,6 +10,7 @@ from tools.inject_backdoor import BadTransform
 import random
 import torch
 from torch.utils.data import Dataset
+import PIL
 
 
 
@@ -121,14 +123,23 @@ class PoisonDataset(Dataset):
 
     def __getitem__(self, index):
         x, y = self.dataset[index]
-        do_poison = (random.random() < self.config.ratio) and self.config.attack.name != 'benign'
-        if do_poison:
+        if (random.random() < self.config.ratio) and self.config.attack.name != 'benign':
             # enhance
-            if self.config.attack.mode == "train" and self.config.attack.name == 'phase' and random.random() < 0.1:
-                x = self.de_norm(x).squeeze()
-                x_p = self.transform(x)
-                x_p.clip_(0, 1)
-                x_e = self.do_norm(x_p) + self.config.attack.enhance * torch.rand_like(x_p, device=x_p.device)
+            if self.config.attack.mode == "train" and random.random() < 0.1:
+                if self.config.attack.name == 'badnet':
+                    _, h, w = x.shape
+                    mask = PIL.Image.open(f'{self.config.attack.tg_path}/mask_{h}_{int(h / 10)}.png')
+                    mask = mask.resize(h, w)
+                    mask = ToTensor(mask)
+                    x = self.de_norm(x).squeeze()
+                    x_p = self.transform(x)
+                    x_p.clip_(0, 1)
+                    x_e = self.do_norm(x_p) + self.config.enhance * torch.rand_like(x_p, device=x_p.device) * mask
+                else:
+                    x = self.de_norm(x).squeeze()
+                    x_p = self.transform(x)
+                    x_p.clip_(0, 1)
+                    x_e = self.do_norm(x_p) + self.config.enhance * torch.rand_like(x_p, device=x_p.device)
                 return x_e, y            
             # poisoned
             x = self.de_norm(x).squeeze()
