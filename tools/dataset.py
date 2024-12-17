@@ -200,12 +200,6 @@ def get_train_and_test_dataset(dataset_name):
     elif dataset_name == 'gtsrb':
         train_ds = torchvision.datasets.GTSRB(root=DATA_PATH, split='train', transform=get_benign_transform(dataset_name), download=True)
         test_ds = torchvision.datasets.GTSRB(root=DATA_PATH, split='test', transform=get_benign_transform(dataset_name, train=False), download=True)
-    elif dataset_name == 'fer2013':
-        train_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/train', transform=get_benign_transform(dataset_name))
-        test_ds = torchvision.datasets.ImageFolder(root='../data/fer2013/test', transform=get_benign_transform(dataset_name, train=False))
-    elif dataset_name == 'rafdb':
-        train_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/train', transform=get_benign_transform(dataset_name))
-        test_ds = torchvision.datasets.ImageFolder(root='../data/RAF-DB/test', transform=get_benign_transform(dataset_name, train=False))
     elif dataset_name == "celeba":
         def celeba_target_transform(target):
             gender_label = target[20]
