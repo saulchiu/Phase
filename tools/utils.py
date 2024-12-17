@@ -20,7 +20,6 @@ def manual_seed(seed: int):
 
 def get_model(name, num_class, device):
     if name == "resnet18":
-        print(sys.path)
         from classifier_models.resnet import ResNet18
         net = ResNet18(num_classes=num_class).to(device)
     elif name == "convnext":
@@ -35,7 +34,6 @@ def get_model(name, num_class, device):
         from classifier_models.repvit import repvit_m1_0 as RepViT
         net = RepViT(num_classes = num_class)
     elif name == "presnet18":
-        print(sys.path)
         from classifier_models.preact_resnet import PreActResNet18
         net = PreActResNet18(num_classes=num_class).to(device)
     elif name == "rnp":

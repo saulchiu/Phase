@@ -19,6 +19,7 @@ from tools.dataset import get_benign_transform
 import numpy as np
 import os
 import argparse
+from tools.utils import get_model
 
 parser = argparse.ArgumentParser('')
 parser.add_argument(
@@ -41,24 +42,9 @@ config = OmegaConf.load(path)
 manual_seed(config.seed)
 device = f'cuda:{config.device}' 
 num_classes, scale = get_dataset_class_and_scale(config.dataset_name)
-if config.model == "resnet18":
-    net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
-    target_layers = [net.layer4[-1].conv2]
-elif config.model == "rnp":
-    from classifier_models.resnet_cifar import resnet18
-    net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
-    target_layers = [net.layer4[-1].conv2]
-elif config.model == "repvgg":
-    from repvgg_pytorch.repvgg import RepVGG
-    net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
-    target_layers = [net.stage4[-1].rbr_dense.conv]
-    net.deploy =True
-else:
-    raise NotImplementedError(config.model)
-ld = torch.load(f'{target_folder}/results.pth', map_location=device)
-
+net = get_model(config.model, num_classes, device=device)
 target_class = args.label
-
+target_layers = [net.layer4[-1].conv2]
 
 
 train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
@@ -68,15 +54,13 @@ for batch, label in train_dl:
     batch = batch.to(device)
     
     for i in range(batch.shape[0]):
-        if label[i].item() == target_class:
+        if label[i].item() != target_class:
             x_c = batch[i]
             break
     if x_c is None:
         continue
 
-net.load_state_dict(ld['model'])
-net.to(device=device)
-net.eval()
+
 cam = cam_class(model=net, target_layers=target_layers)
 y_c = net(x_c.unsqueeze(0))
 _, y_c = torch.max(y_c, 1)
@@ -109,7 +93,6 @@ x_p = patch_trigger(de_norm(x_c).squeeze(), config)
 x_p.clip_(0, 1)
 x_p = do_norm(x_p)
 x_p = x_p.to(device)
-net.load_state_dict(ld['model'])
 net.to(device=device)
 net.eval()
 cam = cam_class(model=net, target_layers=target_layers)
