@@ -222,18 +222,9 @@ def main(args):
     clean_test_loader = DataLoader(test_ds, config.batch, False, num_workers=4, drop_last=False)
     bad_test_loader = DataLoader(bad_test_ds, config.batch, False, num_workers=4, drop_last=False)
 
-
+    num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     logger.info('----------- Backdoor Model Initialization --------------')
-    if config.model == "resnet18":
-        net = PreActResNet18(num_classes=10).to(f'cuda:{config.device}')
-    elif config.model == "rnp":
-        from classifier_models.resnet_cifar import resnet18
-        net = resnet18(num_classes=10).to(f'cuda:{config.device}')
-    elif config.model == "repvgg":
-        from repvgg_pytorch.repvgg import RepVGG
-        net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=10, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
-    else:
-        raise NotImplementedError(config.model)
+    net = get_model(config.model, num_class, device=device)
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
     net.load_state_dict(ld['model'])
     net.to(device=device)
@@ -283,8 +274,6 @@ def main(args):
     checkpoint = torch.load(unlearned_model_path, map_location=device)
     print('Unlearned Model:', checkpoint['epoch'], checkpoint['clean_acc'], checkpoint['bad_acc'])
     args.arch = config.model
-    # if config.model == "resnet18":
-    #     unlearned_model = PreActResNet18(norm_layer=MaskBatchNorm2d)
     if config.model == "resnet18":
         unlearned_model = PreActResNet18(num_classes=10, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
     elif config.model == "rnp":
@@ -326,7 +315,6 @@ def main(args):
     # net = getattr(models, args.arch)(num_classes=10, norm_layer=None)
     # load_state_dict(net, orig_state_dict=state_dict)
     # net = net.to(device)
-    num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     net = get_model(config.model, num_class, device=device)
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
     net.load_state_dict(ld['model'])

@@ -1,14 +1,13 @@
 import sys
 sys.path.append('/home/chengyiqiu/code/INBA/')
 import PIL.Image
-from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from torchvision.models import resnet50
 from tools.dataset import get_dataloader
 from tools.img import tensor2ndarray
 import matplotlib.pyplot as plt
-from tools.dataset import get_de_normalization, get_dataset_class_and_scale, get_dataset_normalization
+from tools.dataset import get_de_normalization, get_dataset_class_and_scale, get_dataset_normalization, get_train_and_test_dataset
 from omegaconf import OmegaConf, DictConfig
 from tools.utils import manual_seed, rm_if_exist
 from classifier_models.preact_resnet import PreActResNet18
@@ -30,10 +29,11 @@ parser.add_argument(
 parser.add_argument(
     '--label',
     type=int,
-    default=1
+    default=2
 )
 args = parser.parse_args()
 
+from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 cam_class = GradCAMPlusPlus
 
 target_folder = args.path
@@ -42,47 +42,39 @@ config = OmegaConf.load(path)
 manual_seed(config.seed)
 device = f'cuda:{config.device}' 
 num_classes, scale = get_dataset_class_and_scale(config.dataset_name)
-net = get_model(config.model, num_classes, device=device)
 target_class = args.label
-target_layers = [net.layer4[-1].conv2]
 
+net = get_model(config.model, num_classes, device=device)
+ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+net.load_state_dict(ld['model'])
+net.to(device)
+net.eval()
+target_layers = [net.layer4[-1]]
 
-train_dl, test_dl = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
 x_c = None
-
-for batch, label in train_dl:
-    batch = batch.to(device)
-    
-    for i in range(batch.shape[0]):
-        if label[i].item() != target_class:
-            x_c = batch[i]
+ctr = 6
+train_data, test_data = get_train_and_test_dataset(config.dataset_name)
+for (x, y) in train_data:
+    if y == target_class:
+        if ctr <= 0:
+            x_c = x
             break
-    if x_c is None:
-        continue
-
+        else:
+            ctr -= 1
+x_c = x_c.to(device)
 
 cam = cam_class(model=net, target_layers=target_layers)
 y_c = net(x_c.unsqueeze(0))
 _, y_c = torch.max(y_c, 1)
-
 benign_heat: np.ndarray = cam(x_c.unsqueeze(0), targets=[ClassifierOutputTarget(y_c.item())])
 
 
-num_classes, scale = get_dataset_class_and_scale(config.dataset_name)
-if config.model == "resnet18":
-    net = PreActResNet18(num_classes=num_classes).to(f'cuda:{config.device}')
-    target_layers = [net.layer4[-1].conv2]
-elif config.model == "rnp":
-    from classifier_models.resnet_cifar import resnet18
-    net = resnet18(num_classes=num_classes).to(f'cuda:{config.device}')
-    target_layers = [net.layer4[-1].conv2]
-elif config.model == "repvgg":
-    from repvgg_pytorch.repvgg import RepVGG
-    net = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=num_classes, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
-    target_layers = [net.stage4[-1].rbr_dense.conv]
-    net.deploy =True
-else:
-    raise NotImplementedError(config.model)
+net = get_model(config.model, num_classes, device=device)
+ld = torch.load(f'{target_folder}/results.pth', map_location=device)
+net.load_state_dict(ld['model'])
+net.to(device)
+net.eval()
+target_layers = [net.layer4[-1]]
 
 de_norm = get_de_normalization(config.dataset_name)
 do_norm = get_dataset_normalization(config.dataset_name)
@@ -93,8 +85,6 @@ x_p = patch_trigger(de_norm(x_c).squeeze(), config)
 x_p.clip_(0, 1)
 x_p = do_norm(x_p)
 x_p = x_p.to(device)
-net.to(device=device)
-net.eval()
 cam = cam_class(model=net, target_layers=target_layers)
 y_p = net(x_p.unsqueeze(0))
 _, y_p = torch.max(y_p, 1)
@@ -128,6 +118,9 @@ axs[1, 1].axis('off')
 rm_if_exist(f'{target_folder}/GradCam/')
 os.makedirs(f'{target_folder}/GradCam', exist_ok=True)
 plt.savefig(f'{target_folder}/GradCam/hotmap.png')
-
 plt.show()
+
+PIL.Image.Image.save(PIL.Image.fromarray(visualization_1), f'{target_folder}/GradCam/singal.png')
+PIL.Image.Image.save(PIL.Image.fromarray(tensor2ndarray(get_de_normalization(config.dataset_name)(x_c).squeeze())), f'{target_folder}/GradCam/raw.png')
+
 
