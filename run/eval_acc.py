@@ -3,7 +3,6 @@ sys.path.append('../')
 from tools.utils import manual_seed, get_model
 from omegaconf import OmegaConf
 import torch
-from classifier_models.preact_resnet import PreActResNet18
 from tools.dataset import get_dataloader, get_dataset_class_and_scale, clip_normalized_tensor, get_dataset_normalization, get_de_normalization
 import torch.nn.functional as F
 # from tools.inject_backdoor import patch_trigger

@@ -3,7 +3,6 @@ sys.path.append('../')
 from tools.utils import manual_seed
 from omegaconf import OmegaConf
 import torch
-from classifier_models.preact_resnet import PreActResNet18
 from tools.dataset import get_dataloader
 import torch.nn.functional as F
 from torchmetrics.image import StructuralSimilarityIndexMeasure

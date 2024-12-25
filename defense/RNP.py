@@ -185,8 +185,7 @@ def save_checkpoint(state, file_path):
 
 from omegaconf import OmegaConf
 from tools.utils import manual_seed
-from classifier_models.preact_resnet import PreActResNet18
-from classifier_models.mask_batchnorm import MaskBatchNorm2d
+from classifier_models.defense.mask_batchnorm import MaskBatchNorm2d
 
 def main(args):
     target_folder = args.path
@@ -224,7 +223,8 @@ def main(args):
 
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     logger.info('----------- Backdoor Model Initialization --------------')
-    net = get_model(config.model, num_class, device=device)
+    from classifier_models.defense.RNP_model import resnet18
+    net = resnet18(num_classes=num_class, norm_layer=None).to(f'cuda:{config.device}')
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
     net.load_state_dict(ld['model'])
     net.to(device=device)
@@ -274,16 +274,10 @@ def main(args):
     checkpoint = torch.load(unlearned_model_path, map_location=device)
     print('Unlearned Model:', checkpoint['epoch'], checkpoint['clean_acc'], checkpoint['bad_acc'])
     args.arch = config.model
-    if config.model == "resnet18":
-        unlearned_model = PreActResNet18(num_classes=10, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
-    elif config.model == "rnp":
-        from classifier_models.resnet_cifar import resnet18
-        unlearned_model = resnet18(num_classes=10, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
-    elif config.model == "repvgg":
-        from repvgg_pytorch.repvgg import RepVGG
-        unlearned_model = RepVGG(num_blocks=[2, 4, 14, 1], num_classes=10, width_multiplier=[1.5, 1.5, 1.5, 2.75]).to(device=f'cuda:{config.device}')
-    else:
-        raise NotImplementedError(config.model)
+
+    from classifier_models.defense.RNP_model import resnet18
+    unlearned_model = resnet18(num_classes=num_class, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
+
     # unlearned_model = getattr(models, args.arch)(num_classes=10, norm_layer=models.MaskBatchNorm2d)
     load_state_dict(unlearned_model, orig_state_dict=checkpoint['state_dict'])
     unlearned_model = unlearned_model.to(device)

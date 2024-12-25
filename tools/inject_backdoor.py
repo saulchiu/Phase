@@ -188,6 +188,12 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             x_re[x_c <= 5] = x_c[x_c <= 5]
             x_re = x_re.astype(np.float32)
         x_p = ndarray2tensor(x_re)
+
+        # if config.attack.mode == 'train':
+        #     tg = x_p - x_0
+        #     tg = zero_out_tensor(tg, config.attack.mask_coef)
+        #     x_p = x_0 + tg
+        
     elif attack_name == 'fiba':
         img_ = tensor2ndarray(x_0)
         target_img = PIL.Image.open(config.attack.tg_path)

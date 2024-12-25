@@ -4,7 +4,6 @@ REPO_ROOT = CWD.split('INBA')[0] + "INBA/"
 
 import sys
 sys.path.append(REPO_ROOT)
-from classifier_models.preact_resnet import PreActResNet18
 from torchvision.transforms.transforms import ToTensor, Resize, Compose
 import torch
 from torch.utils.data.dataloader import DataLoader

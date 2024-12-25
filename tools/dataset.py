@@ -125,7 +125,7 @@ class PoisonDataset(Dataset):
         x, y = self.dataset[index]
         if (random.random() < self.config.ratio) and self.config.attack.name != 'benign':
             # enhance
-            if self.config.attack.mode == "train" and random.random() < 0.1:
+            if self.config.attack.mode == "train" and self.config.enhance != 0 and random.random() < 0.1:
                 if self.config.attack.name == 'badnet':
                     _, h, w = x.shape
                     mask = PIL.Image.open(f'{self.config.attack.tg_path}/mask_{h}_{int(h / 10)}.png')

@@ -33,11 +33,12 @@ def get_model(name, num_class, device):
     elif name == "repvit":
         from classifier_models.repvit import repvit_m1_0 as RepViT
         net = RepViT(num_classes = num_class)
-    elif name == "presnet18":
-        from classifier_models.preact_resnet import PreActResNet18
-        net = PreActResNet18(num_classes=num_class).to(device)
+    # for defense, we use the same models as their original repositories.
     elif name == "rnp":
-        from classifier_models.resnet_cifar import resnet18
+        from classifier_models.defense.RNP_model import resnet18
+        net = resnet18(num_classes=num_class).to(device)
+    elif name == 'fip':
+        from classifier_models.defense.FIP_model import resnet18
         net = resnet18(num_classes=num_class).to(device)
     else:
         raise NotImplementedError(name)
