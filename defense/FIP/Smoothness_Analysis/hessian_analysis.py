@@ -291,12 +291,11 @@ config.attack.mode = "eval"
 manual_seed(config.seed)
 device = f'cuda:{config.device}'
 num_class, scale = get_dataset_class_and_scale(config.dataset_name)
-net = get_model(config.model, num_class, device=device)
+from classifier_models.defense.FIP_model import resnet18
+net = resnet18(num_classes=num_class)
 ld = torch.load(f'{target_folder}/results.pth', map_location=device)
 net.load_state_dict(ld['model'])
 net.to(device)
-if config.model == "repvgg":
-    net.deploy =True
 
 train_loader, test_loader = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
 

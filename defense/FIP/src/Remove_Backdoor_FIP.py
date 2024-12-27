@@ -12,10 +12,8 @@ import math
 import networks
 import torch.nn.functional as F
 import pandas as pd
-import data.badnets_blend as poison
 from torch.autograd import Variable
 from PIL import Image
-from data.dataloader_cifar import *
 import matplotlib.pyplot as plt
 import random 
 from Regularizer import CDA_Regularizer as regularizer   ## Regularizer 
@@ -155,12 +153,12 @@ def main(parser, transform_train, transform_test):
     manual_seed(config.seed)
     device = f'cuda:{config.device}'
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
-    net = get_model(config.model, num_class, device=device)
+    from classifier_models.defense.FIP_model import resnet18
+    net = resnet18(num_classes=num_class)
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
     net.load_state_dict(ld['model'])
     net.to(device)
-    if config.model == "repvgg":
-        net.deploy =True
+    net.train()
 
     _, clean_test_loader = get_dataloader(config.dataset_name, config.batch, config.pin_memory, config.num_workers)
     args.poison_type = config.attack.name
@@ -288,7 +286,7 @@ def FIP_Train(args,epoch, net, clean_val, clean_val_loader, criterion_reg):
     desc = ('[%s][LR=%s] Loss: %.3f | Acc: %.3f%% (%d/%d)' %
             ('Fisher', args.lr, 0, 0, correct, total))
 
-
+    from tqdm import tqdm
     prog_bar = tqdm(enumerate(clean_val_loader), total=len(clean_val_loader), desc=desc, leave=True)
     for batch_idx, (inputs, targets) in prog_bar:
         inputs, targets = inputs.cuda(), targets.cuda()
@@ -334,7 +332,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=128, help='the batch size for dataloader')       
     parser.add_argument('--lr', type=float, default=0.005, help='the learning rate for mask optimization')   
     parser.add_argument('--nb-epochs', type=int, default=2000, help='the number of iterations for training')  
-    parser.add_argument('--epoch-aggregation', type=int, default=500, help='print results every few iterations')  
+    parser.add_argument('--epoch-aggregation', type=int, default=100, help='print results every few iterations')  
     parser.add_argument('--data-dir', type=str, default='../data', help='dir to the dataset')
     parser.add_argument('--val-ratio', type=float, default=0.01, help='The fraction of the validate set')  ## Controls the validation size
     parser.add_argument('--output-dir', type=str, default='save/purified_networks/')
@@ -357,8 +355,8 @@ if __name__ == '__main__':
     parser.add_argument('--target_type', type=str, default='all2one', help='type of backdoor label')
     parser.add_argument('--trig_w', type=int, default=1, help='width of trigger pattern')
     parser.add_argument('--trig_h', type=int, default=1, help='height of trigger pattern')    
-    parser.add_argument('--alpha', type=float, default=0.8, help='Search area design Parameter')
-    parser.add_argument('--beta', type=float, default=0.5, help='Search area design Parameter')
+    parser.add_argument('--alpha', type=float, default=0.9, help='Search area design Parameter')
+    parser.add_argument('--beta', type=float, default=0.1, help='Search area design Parameter')
     parser.add_argument('--num_classes', type=float, default=10, help='Number of classes')
     parser.add_argument("--reg_F", default=0.5, type=float, help="CDA Regularizer Coefficient, eta_F")
 
