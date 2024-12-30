@@ -14,7 +14,6 @@ from skimage.metrics import structural_similarity
 from skimage.metrics import peak_signal_noise_ratio
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from classifier_models.preact_resnet import PreActResNet18
 from tools.utils import manual_seed
 import random
 import matplotlib.pyplot as plt

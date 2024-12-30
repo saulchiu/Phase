@@ -7,7 +7,6 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
-from classifier_models.preact_resnet import PreActResNet18
 from tools.utils import manual_seed
 import random
 import numpy

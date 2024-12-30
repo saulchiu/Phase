@@ -486,23 +486,28 @@ class ctrl:
         r = Resize(args.img_size[:2])
 
         self.train_poison_frequency_agent = PoisonFre(None, args.img_size[0], args.trigger_channels, args.img_size[0], args.pos_list, args.use_dct, args.use_yuv) #PoisonFre(None, 32, [1, 2], 32, [15, 31], False, True)
-        self.magnitude = 100
+        self.magnitude = args.magnitude
         def train_bd_transform(img,target=None,image_serial_id=None):
-            x_tensor = t(r(img))
+            # x_tensor = t(r(img))
+            x_tensor = img
             x_tensor = x_tensor[None,...]
             y_tensor = torch.tensor(target)
             x_r, y_r = self.train_poison_frequency_agent.Poison_Frequency_Diff(x_tensor, y_tensor, self.magnitude,)
-            return ToPILImage()(x_r[0])
+            # return ToPILImage()(x_r[0])
+            return x_r[0]
 
         self.test_poison_frequency_agent = PoisonFre(None, args.img_size[0], args.trigger_channels, args.img_size[0], args.pos_list, args.use_dct, args.use_yuv) #PoisonFre(None, 32, [1, 2], 32, [15, 31], False, True)
-        self.magnitude = 100
+        self.magnitude = args.magnitude
 
         def test_bd_transform(img, target=None, image_serial_id=None):
-            x_tensor = t(r(img))
+            # x_tensor = t(r(img))
+            x_tensor = img
             x_tensor = x_tensor[None,...]
             y_tensor = torch.tensor(target)
             x_r, y_r = self.test_poison_frequency_agent.Poison_Frequency_Diff(x_tensor, y_tensor, self.magnitude, )
-            return ToPILImage()(x_r[0])
+            # return ToPILImage()(x_r[0])
+            return x_r[0]
+
 
         self.train_bd_transform = train_bd_transform
         self.test_bd_transform = test_bd_transform

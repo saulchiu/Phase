@@ -68,6 +68,23 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         factor = 0.05
         x_p = (1 - factor) * x_0 + factor * torch.randn_like(x_0, device=x_0.device)
         x_p = torch.clip(x_p, 0, 1)
+    elif attack_name == 'ctrl':
+        x_train = x_0.clone()
+        channel_list =[1, 2]
+        window_size = config.attack.window_size
+        magnitude = config.attack.magnitude
+        pos_list = [(15, 15), (31, 31)]
+        x_train = tensor2ndarray(x_train)
+        x_train = np.stack(rgb_to_yuv(x_train[:,:,0], x_train[:,:,1], x_train[:,:,2]), axis=-1)
+        x_train = dct_2d_3c_slide_window(x_train, window_size=window_size)
+        for ch in channel_list:
+            for w in range(0, x_train.shape[0], window_size):
+                for h in range(0, x_train.shape[1], window_size):
+                        for pos in pos_list:
+                            x_train[w+pos[0], h+pos[1], ch] = x_train[w+pos[0], h+pos[1], ch] + magnitude
+        x_train = idct_2d_3c_slide_window(x_train, window_size=window_size)
+        x_p = np.stack(yuv_to_rgb(x_train[:,:,0], x_train[:,:,1], x_train[:,:,2]), axis=-1)
+        x_p = ndarray2tensor(x_p)
     elif attack_name == 'ftrojan':
         channel_list = [1, 2]
         window_size = 32
@@ -88,6 +105,29 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         x_dct = np.transpose(x_dct, (1, 2, 0))
         x_idct = idct_2d_3c_slide_window(x_dct, window_size)
         x_idct = yuv2rgb(x_idct)
+
+        # test
+        # g = np.zeros(shape=(h, w, c))
+        # window_size = 32
+        # channel_list = [1]
+        # pos_list = [(15, 15), (31, 31)]
+        # magnitude = 50
+
+        # g = rgb2yuv(g)
+        # g_dct = dct_2d_3c_slide_window(g, window_size)
+        # g_dct = np.transpose(g_dct, (2, 0, 1))
+        # for ch in channel_list:
+        #     for w in range(0, g_dct.shape[1], window_size):
+        #         for h in range(0, g_dct.shape[2], window_size):
+        #             for pos in pos_list:
+        #                 g_dct[ch][w + pos[0], h + pos[1]] += magnitude
+        # g_dct = np.transpose(g_dct, (1, 2, 0))
+        # g_idct = idct_2d_3c_slide_window(g_dct, window_size)
+        # g_idct = yuv2rgb(g_idct)
+        # g_idct[0:3, 0:3, 0]
+        # x_p = tensor2ndarray(x_0) + 0.5 * g_idct
+        # x_p = x_p.astype(np.uint8)
+        # x_idct = np.clip(x_p, 0, 255)
         x_p = ndarray2tensor(x_idct)
     elif attack_name == 'wanet':  # num_workers should be 1!
         def get_wanet_grid(image_size, grid_path: str, s: float, device='cpu'):
@@ -193,7 +233,6 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
         #     tg = x_p - x_0
         #     tg = zero_out_tensor(tg, config.attack.mask_coef)
         #     x_p = x_0 + tg
-        
     elif attack_name == 'fiba':
         img_ = tensor2ndarray(x_0)
         target_img = PIL.Image.open(config.attack.tg_path)
@@ -302,6 +341,8 @@ def patch_trigger(x_0: torch.Tensor, config) -> torch.Tensor:
             tg = x_p - x_0
             tg = zero_out_tensor(tg, config.attack.mask_coef)
             x_p = x_0 + tg
+    elif attack_name == 'refool':
+        pass
     else:
         raise NotImplementedError(attack_name)
     x_p = x_p.to(x_0.dtype)

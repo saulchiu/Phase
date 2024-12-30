@@ -75,7 +75,7 @@ def idct_2d_3c_slide_window(x_train: np.ndarray, window_size=32):
 
 
 def dct_2d_3c_full_scale(x: np.ndarray):
-    return idct_2d_3c_slide_window(x, x.shape[0])
+    return dct_2d_3c_slide_window(x, x.shape[0])
 
 def idct_2d_3c_full_scale(x: np.ndarray):
     return idct_2d_3c_slide_window(x, x.shape[0])
