@@ -37,9 +37,9 @@ def get_model(name, num_class, device):
     elif name == "rnp":
         from classifier_models.defense.RNP_model import resnet18
         net = resnet18(num_classes=num_class).to(device)
-    elif name == 'fip':
-        from classifier_models.defense.FIP_model import resnet18
-        net = resnet18(num_classes=num_class).to(device)
+    elif name == "anp":
+        from classifier_models.defense.ANP.resnet_cifar import resnet18
+        net = resnet18(num_classes=num_class).to(device=device)
     else:
         raise NotImplementedError(name)
     return net

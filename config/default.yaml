@@ -13,7 +13,7 @@ pin_memory: True
 path: None  # None is a str "None"
 device: 0
 batch: 64
-model: repvgg
+model: resnet18
 seed: 42
 val_epoch: 1
 # ema_update_every: 100
@@ -22,4 +22,4 @@ val_epoch: 1
 enhance: 0.05
 
 defaults:
-  - attack: inba
+  - attack: refool
