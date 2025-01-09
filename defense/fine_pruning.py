@@ -207,6 +207,12 @@ def main():
     plt.savefig(f'{opt.data_root}/BA_ASR_Ratio.png')
     plt.show()
     
+    res = {
+        'acc_list': BA_list,
+        'asr_list': ASR_list,
+    }
+    torch.save(res, f'{target_folder}/plot_results.pth')
+    
 
 
 if __name__ == "__main__":
