@@ -125,14 +125,14 @@ if __name__ == "__main__":
 	parser.add_argument('--dataset', default='cifar10', help='the dataset to use')
 	parser.add_argument('--poi_path', default='./checkpoint/badnets_8_02_ckpt.pth', help='path of the poison model need to be unlearn')
 	parser.add_argument('--log_path', default='./unlearn_logs', help='path of the log file')
-	parser.add_argument('--device', type=str, default='4,5,6,7', help='Device to use. Like cuda, cuda:0 or cpu')
-	parser.add_argument('--batch_size', type=int, default=100, help='batch size of unlearn loader')
+	parser.add_argument('--device', type=str, default='1', help='Device to use. Like cuda, cuda:0 or cpu')
+	parser.add_argument('--batch_size', type=int, default=128, help='batch size of unlearn loader')
 	parser.add_argument('--unl_set', default=None, help='extra unlearn dataset, if None then use test data')
-	parser.add_argument('--optim', type=str, default='Adam', help='type of outer loop optimizer utilized')
-	parser.add_argument('--lr', default=0.001, type=float, help='learning rate of outer loop optimizer')
+	parser.add_argument('--optim', type=str, default='SGD', help='SDG/Adam')
+	parser.add_argument('--lr', default=1e-3, type=float, help='learning rate of outer loop optimizer')
 
 	## hyper params
-	parser.add_argument('--n_rounds', default=3, type=int, help='the maximum number of unelarning rounds')
+	parser.add_argument('--n_rounds', default=200, type=int, help='the maximum number of unelarning rounds')
 	parser.add_argument('--K', default=5, type=int, help='the maximum number of fixed point iterations')
 
 	parser.add_argument('--path', type=str, default='/home/chengyiqiu/code/INBA/results/cifar10/badnet/fip/20241225205432', help='the results folder path.')
@@ -153,11 +153,12 @@ if __name__ == "__main__":
 	log_file = "{}.txt".format(args.dataset)
 	Tee(os.path.join(args.log_path, log_file), 'w')
 
-	device = 'cuda:0'
+	device = f'cuda:{args.device}'
 
 	logger.info('==> Preparing data..')
 	path = f'{args.path}/config.yaml'
 	config = OmegaConf.load(path)
+	config.attack.mode = 'defense'
 	manual_seed(config.seed)
 
 	train_ds, test_set = get_train_and_test_dataset(config.dataset_name)
@@ -165,28 +166,25 @@ if __name__ == "__main__":
 	poison_config = config.copy()
 	poison_config.ratio = 1
 	att_val_set = PoisonDataset(unl_set, poison_config)
-
-	# test_set, att_val_set, unl_set = get_eval_data(args.dataset, attack_name='badnets', target_lab='8', args=args)
-	
+	bs = args.batch_size
 	#data loader for verifying the clean test accuracy
 	clnloader = torch.utils.data.DataLoader(
-		test_set, batch_size=200, shuffle=False, num_workers=2)
+		test_set, batch_size=bs, shuffle=False, num_workers=2)
 
 	#data loader for verifying the attack success rate
 	poiloader_cln = torch.utils.data.DataLoader(
-		unl_set, batch_size=200, shuffle=False, num_workers=2)
+		unl_set, batch_size=bs, shuffle=False, num_workers=2)
 
 	poiloader = torch.utils.data.DataLoader(
-		att_val_set, batch_size=200, shuffle=False, num_workers=2)
+		att_val_set, batch_size=bs, shuffle=False, num_workers=2)
 
 	#data loader for the unlearning step
 	unlloader = torch.utils.data.DataLoader(
-		unl_set, batch_size=args.batch_size, shuffle=False, num_workers=2)
+		unl_set, batch_size=bs, shuffle=False, num_workers=2)
 
 
 	### initialize theta
 	num_classes, _ = get_dataset_class_and_scale(config.dataset_name)
-	# model = VGG('small_VGG16').to(device)
 	model = get_model(config.model, num_classes, device)
 	criterion = nn.CrossEntropyLoss()
 	# model.load_state_dict(torch.load(args.poi_path)['net'])
@@ -194,9 +192,7 @@ if __name__ == "__main__":
 	ld = torch.load(f'{args.path}/results.pth', map_location=device)
 	model.load_state_dict(ld['model'])
 	model.to(device)
-	for param in model.parameters():
-		param.requires_grad = True
-	model.train()
+	model.eval()
 	if args.optim == 'SGD':
 		outer_opt = torch.optim.SGD(model.parameters(), lr=args.lr)
 	elif args.optim == 'Adam':
@@ -222,7 +218,7 @@ if __name__ == "__main__":
 	def loss_outer(perturb, model_params):
 		portion = 0.01
 		images, labels = images_list[batchnum].to(device), labels_list[batchnum].long().to(device)
-		patching = torch.zeros_like(images, device='cuda')
+		patching = torch.zeros_like(images, device=device)
 		number = images.shape[0]
 		rand_idx = random.sample(list(np.arange(number)),int(number*portion))
 		patching[rand_idx] = perturb[0]
@@ -242,13 +238,11 @@ if __name__ == "__main__":
 
 	### inner loop and optimization by batch computing
 	logger.info("=> Conducting Defence..")
-	# model.load_state_dict(torch.load(args.poi_path)['net'])
-	# model = get_model(config.model, num_classes, device=device)
-	# ld = torch.load(f'{args.path}/results.pth', map_location=device)
-	# model.load_state_dict(ld['model'])
-	# model.to(device)
 	ASR_list = [get_results(model, criterion, poiloader, device)]
 	ACC_list = [get_results(model, criterion, clnloader, device)]
+
+	# for param in model.parameters():
+	# 	param.requires_grad = True
 
 	for round in range(args.n_rounds):
 		# batch_pert = torch.zeros_like(test_set.tensors[0][:1], requires_grad=True, device='cuda')
@@ -280,5 +274,10 @@ if __name__ == "__main__":
 		
 		print('ACC:',get_results(model,criterion,clnloader,device))
 		print('ASR:',get_results(model,criterion,poiloader,device))
+	res = {
+		'acc_list': ACC_list,
+		'asr_list': ASR_list,
+	}
+	torch.save(res, f'{args.log_path}/plot_results.pth')
 
 	

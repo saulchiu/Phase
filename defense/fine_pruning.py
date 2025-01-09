@@ -75,7 +75,7 @@ def get_arguments():
     parser.add_argument("--data_root", type=str, default="/home/ubuntu/temps")
     parser.add_argument("--checkpoints", type=str, default="../../checkpoints")
     parser.add_argument("--temps", type=str, default="./temps")
-    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--device", type=int, default=0)
 
     parser.add_argument("--dataset", type=str, default="celeba")
     parser.add_argument("--input_height", type=int, default=None)
@@ -117,14 +117,12 @@ def main():
     os.makedirs(opt.data_root, exist_ok=True)
 
     manual_seed(config.seed)
-    device = f'cuda:{config.device}'
+    device = f'cuda:{opt.device}'
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     net = get_model(config.model, num_class, device=device)
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
     net.load_state_dict(ld['model'])
     net.to(device)
-    if config.model == "repvgg":
-        net.deploy =True
     _, test_dataloader = get_dataloader(config.dataset_name, 64, config.pin_memory, config.num_workers)
     mode = opt.attack_mode
     netC = net
@@ -157,7 +155,7 @@ def main():
     # Pruning times - no-tuning after pruning a channel!!!
     acc_clean = []
     acc_bd = []
-    opt.outfile = f"{opt.data_root}/{opt.dataset}_results.txt"
+    opt.outfile = f"{opt.data_root}/results.txt"
 
     do_norm = get_dataset_normalization(config.dataset_name)
     de_norm = get_de_normalization(config.dataset_name)

@@ -189,10 +189,10 @@ from classifier_models.defense.mask_batchnorm import MaskBatchNorm2d
 
 def main(args):
     target_folder = args.path
-
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
+    config.attack.mode = 'defense'
     args.log_root = f'{target_folder}/rnp/log'
     args.backdoor_model_path = args.output_weight = f'{target_folder}/rnp/'
     os.makedirs(args.log_root, exist_ok=True)

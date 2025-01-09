@@ -4,13 +4,13 @@ import PIL.Image
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from torchvision.models import resnet50
-from tools.dataset import get_dataloader
-from tools.img import tensor2ndarray
+from tools.dataset import get_dataloader, get_dataset_normalization
+from tools.img import tensor2ndarray, ndarray2tensor
 import matplotlib.pyplot as plt
 from tools.dataset import get_de_normalization, get_dataset_class_and_scale, get_dataset_normalization, get_train_and_test_dataset
 from omegaconf import OmegaConf, DictConfig
 from tools.utils import manual_seed, rm_if_exist
-from classifier_models.preact_resnet import PreActResNet18
+from torchvision.transforms.transforms import ToTensor, Resize, Compose
 import torch
 import random
 import PIL
@@ -29,7 +29,7 @@ parser.add_argument(
 parser.add_argument(
     '--label',
     type=int,
-    default=2
+    default=1
 )
 args = parser.parse_args()
 
@@ -53,15 +53,20 @@ target_layers = [net.layer4[-1]]
 
 x_c = None
 ctr = 6
-train_data, test_data = get_train_and_test_dataset(config.dataset_name)
-for (x, y) in train_data:
-    if y == target_class:
-        if ctr <= 0:
-            x_c = x
-            break
-        else:
-            ctr -= 1
+# train_data, test_data = get_train_and_test_dataset(config.dataset_name)
+# for (x, y) in train_data:
+#     if y == target_class:
+#         if ctr <= 0:
+#             x_c = x
+#             break
+#         else:
+#             ctr -= 1
+# x_c = x_c.to(device)
+
+x_c = PIL.Image.open('/home/chengyiqiu/code/INBA/data/imagenette2/train/n01440764/ILSVRC2012_val_00006697.JPEG')
+x_c = Compose([ToTensor(), Resize((scale, scale)), get_dataset_normalization(config.dataset_name)])(x_c)
 x_c = x_c.to(device)
+
 
 cam = cam_class(model=net, target_layers=target_layers)
 y_c = net(x_c.unsqueeze(0))
