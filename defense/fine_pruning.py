@@ -206,12 +206,12 @@ def main():
     plt.ylim(0, 100)
     plt.savefig(f'{opt.data_root}/BA_ASR_Ratio.png')
     plt.show()
-    
+
     res = {
         'acc_list': BA_list,
         'asr_list': ASR_list,
     }
-    torch.save(res, f'{target_folder}/plot_results.pth')
+    torch.save(res, f'{opt.data_root}/plot_results.pth')
     
 
 
