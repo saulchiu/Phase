@@ -176,7 +176,7 @@ def evaluate_by_threshold(model, logger, mask_values, pruning_max, pruning_step,
             start, layer_name, neuron_idx, threshold, po_loss, po_acc, cl_loss, cl_acc))
         results.append('{:.2f} \t {} \t {} \t {} \t {:.4f} \t {:.4f} \t {:.4f} \t {:.4f}\n'.format(
             start, layer_name, neuron_idx, threshold, po_loss, po_acc, cl_loss, cl_acc))
-    return results
+    return results, cl_acc, po_acc
 
 def save_checkpoint(state, file_path):
     # filepath = os.path.join(args.output_dir, args.arch + '-unlearning_epochs{}.tar'.format(epoch))
@@ -189,9 +189,10 @@ from classifier_models.defense.mask_batchnorm import MaskBatchNorm2d
 
 def main(args):
     target_folder = args.path
+    device = f'cuda:{args.cuda}'
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
-    manual_seed(config.seed)
+    manual_seed(66)
     config.attack.mode = 'defense'
     args.log_root = f'{target_folder}/rnp/log'
     args.backdoor_model_path = args.output_weight = f'{target_folder}/rnp/'
@@ -224,7 +225,7 @@ def main(args):
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     logger.info('----------- Backdoor Model Initialization --------------')
     from classifier_models.defense.RNP_model import resnet18
-    net = resnet18(num_classes=num_class, norm_layer=None).to(f'cuda:{config.device}')
+    net = resnet18(num_classes=num_class, norm_layer=None).to(device=device)
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)
     net.load_state_dict(ld['model'])
     net.to(device=device)
@@ -276,7 +277,7 @@ def main(args):
     args.arch = config.model
 
     from classifier_models.defense.RNP_model import resnet18
-    unlearned_model = resnet18(num_classes=num_class, norm_layer=MaskBatchNorm2d).to(f'cuda:{config.device}')
+    unlearned_model = resnet18(num_classes=num_class, norm_layer=MaskBatchNorm2d).to(device)
 
     # unlearned_model = getattr(models, args.arch)(num_classes=10, norm_layer=models.MaskBatchNorm2d)
     load_state_dict(unlearned_model, orig_state_dict=checkpoint['state_dict'])
@@ -328,7 +329,7 @@ def main(args):
     po_loss, po_acc = test(model=net, criterion=criterion, data_loader=bad_test_loader)
     logger.info('0 \t None     \t None     \t {:.4f} \t {:.4f} \t {:.4f} \t {:.4f}'.format(po_loss, po_acc, cl_loss, cl_acc))
     if args.pruning_by == 'threshold':
-        results = evaluate_by_threshold(
+        results, clean_acc, poisoned_acc = evaluate_by_threshold(
             net, logger, mask_values, pruning_max=args.pruning_max, pruning_step=args.pruning_step,
             criterion=criterion, clean_loader=clean_test_loader, poison_loader=bad_test_loader
         )
@@ -341,6 +342,7 @@ def main(args):
     with open(file_name, "w") as f:
         f.write('No \t Layer Name \t Neuron Idx \t Mask \t PoisonLoss \t PoisonACC \t CleanLoss \t CleanACC\n')
         f.writelines(results)
+    return clean_acc, poisoned_acc
 
 
 if __name__ == '__main__':
@@ -348,7 +350,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # various path
-    parser.add_argument('--cuda', type=int, default=1, help='cuda available')
+    parser.add_argument('--cuda', type=int, default=0, help='cuda available')
     parser.add_argument('--save-every', type=int, default=5, help='save checkpoints every few epochs')
     parser.add_argument('--log_root', type=str, default='logs/', help='logs are saved here')
     parser.add_argument('--output_weight', type=str, default='weights/')
@@ -396,4 +398,19 @@ if __name__ == '__main__':
     # os.makedirs(args.log_root, exist_ok=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    main(args)
+    ratios = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    BA_list = []
+    ASR_list = []
+    os.makedirs(f'{args.path}/rnp_plot/', exist_ok=True)
+    for ratio in ratios:
+        args.pruning_max = ratio
+        BA, ASR = main(args)
+        BA_list.append(BA)
+        ASR_list.append(ASR)
+        print(BA_list)
+        print(ASR_list)
+    res = {
+        'acc_list': BA_list,
+        'asr_list': ASR_list,
+    }
+    torch.save(res, f'{args.path}/rnp_plot/plot_results.pth')

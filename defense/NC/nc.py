@@ -80,12 +80,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some paths.')
     parser.add_argument('--path', type=str, help='The path to the target folder.')
     parser.add_argument('--batch', type=int, default=64)
+    parser.add_argument('--device', type=int, default=0)
     args = parser.parse_args()
     target_folder = args.path
     path = f'{target_folder}/config.yaml'
     config = OmegaConf.load(path)
     manual_seed(config.seed)
-    device = f'cuda:{config.device}'
+    device = f'cuda:{args.device}'
     num_class, scale = get_dataset_class_and_scale(config.dataset_name)
     net = get_model(config.model, num_class, device=device)
     ld = torch.load(f'{target_folder}/results.pth', map_location=device)

@@ -1,76 +1,84 @@
-import matplotlib
+import os
+import torch
 import matplotlib.pyplot as plt
 from matplotlib.font_manager import FontProperties
 
 # 设置自定义字体
 font = FontProperties(fname='/home/chengyiqiu/code/INBA/resource/Fonts/Calibri.ttf')
+label_size = 50
+font_size = 20
 
-# 横轴：pruning ratio
-x = [10, 30, 50, 70, 90]  # 固定的 pruning ratio
+# 数据文件路径
+result_paths = {
+    'BadNets': '/home/chengyiqiu/code/INBA/results/cifar10/badnet/rnp/20241226124414/rnp_plot/plot_results.pth',
+    'Blend': '/home/chengyiqiu/code/INBA/results/cifar10/blended/rnp/20241226124509/rnp_plot/plot_results.pth',
+    'Refool': '/home/chengyiqiu/code/INBA/results/cifar10/refool/rnp/20250104124818/rnp_plot/plot_results.pth',
+    'WaNet': '/home/chengyiqiu/code/INBA/results/cifar10/wanet/rnp/20241226124532/rnp_plot/plot_results.pth',
+    'FTrojan': '/home/chengyiqiu/code/INBA/results/cifar10/ftrojan/rnp/20241226124550/rnp_plot/plot_results.pth',
+    'CTRL': '/home/chengyiqiu/code/INBA/results/cifar10/ctrl/rnp/20250104124752/rnp_plot/plot_results.pth',
+    'FIBA': '/home/chengyiqiu/code/INBA/results/cifar10/fiba/rnp/20241226135918/rnp_plot/plot_results.pth',
+    'DUBA': '/home/chengyiqiu/code/INBA/results/cifar10/duba/rnp/20241226135946/rnp_plot/plot_results.pth',
+    'Phojan': '/home/chengyiqiu/code/INBA/results/cifar10/phase/rnp/20241224201655/rnp_plot/plot_results.pth',
+}
 
-# 数据
-BadNets_BA = [91.41, 89.23, 78.09, 18.06, 10.00]
-BadNets_ASR = [43.66, 28.27, 38.95, 54.67, 90.88]
+# 从文件中读取数据
+data = {}
+length = None
+for name, path in result_paths.items():
+    res = torch.load(path)
+    acc_list = [x * 100 for x in res['acc_list']]
+    asr_list = [x * 100 for x in res['asr_list']]
+    # 断言所有列表长度一致
+    if length is None:
+        length = len(acc_list)
+    assert length == len(acc_list), "Length Error"
+    assert length == len(asr_list), "Length Error"
+    data[name] = {'ACC': acc_list, 'ASR': asr_list}
 
-Blend_BA = [93.25, 91.87, 82.29, 20.49, 10.00]
-Blend_ASR = [49.23, 35.08, 42.82, 7.12, 90.88]
+# 确定横轴（pruning ratio）
+pruning_ratios = [i * 0.1 for i in range(1, 11)]  # 0.1 到 1.0
 
-WaNet_BA = [91.51, 87.85, 80.55, 31.99, 10.00]
-WaNet_ASR = [16.79, 15.84, 14.94, 2.86, 0.87]
+# 创建保存图像的目录
+output_dir = './RNP'
+os.makedirs(output_dir, exist_ok=True)
 
-FTrojan_BA = [79.19, 63.51, 19.55, 10.02, 10.59]
-FTrojan_ASR = [14.58, 12.53, 2.58, 1.08, 0.79]
+# 绘制每种攻击的曲线图
+for name, metrics in data.items():
+    plt.figure(figsize=(8, 6))
+    acc = metrics['ACC']
+    asr = metrics['ASR']
+    plt.plot(pruning_ratios, acc, linestyle='-', label=f'BA', marker='o', color='b')
+    plt.plot(pruning_ratios, asr, linestyle='--', label=f'ASR', marker='^', color='r')
+    
+    # 设置 X 轴和 Y 轴标签
+    plt.xlabel('Pruning ratio', fontproperties=font, fontsize=label_size)
+    plt.ylabel('BA/ASR (%)', fontproperties=font, fontsize=label_size)
+    
+    # 设置 X 轴刻度范围
+    plt.xticks(pruning_ratios, fontsize=font_size)  # 设置 X 轴刻度及字体大小
+    
+    # 设置 Y 轴刻度字体大小
+    plt.yticks(fontsize=font_size)
+    plt.ylim(0, 110)
+    
+    # 添加图例
+    leg = plt.legend(loc='upper center', prop=font, bbox_to_anchor=(0.5, 1.15), ncol=2)
 
-FIBA_BA = [90.88, 89.25, 80.59, 43.27, 10.38]
-FIBA_ASR = [17.60, 17.17, 16.37, 6.74, 1.15]
+    # 直接设置图例中文字的字体大小
+    for text in leg.get_texts():
+        text.set_fontsize(fontsize=30)
 
-DUBA_BA = [48.00, 33.53, 11.50, 12.74, 9.59]
-DUBA_ASR = [61.85, 52.37, 8.66, 40.95, 1.08]
+    # 调整布局，确保图例不会与图表内容重叠
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # 这里的rect参数调整了图表的边界，为图例留出空间
+    
+    # 添加网格
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    # 保存图像
+    save_path = os.path.join(output_dir, f'{name}.pdf')
+    plt.savefig(save_path, format='pdf', bbox_inches='tight', pad_inches=0)
+    
+    # 显示图像（可选）
+    plt.close()
 
-Phojan_BA = [68.04, 56.64, 39.94, 18.43, 10.02]
-Phojan_ASR = [89.36, 92.36, 89.71, 87.16, 90.07]
-
-# 绘制图形
-plt.figure(figsize=(12, 8))
-colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']  # 颜色列表
-datasets = [
-    (BadNets_BA, BadNets_ASR, 'BadNets'),
-    (Blend_BA, Blend_ASR, 'Blend'),
-    (WaNet_BA, WaNet_ASR, 'WaNet'),
-    (FTrojan_BA, FTrojan_ASR, 'FTrojan'),
-    (FIBA_BA, FIBA_ASR, 'FIBA'),
-    (DUBA_BA, DUBA_ASR, 'DUBA'),
-    (Phojan_BA, Phojan_ASR, 'Phojan')
-]
-
-# 自定义图例
-legend_elements = []
-
-# 循环绘制每组数据
-for i, (BA, ASR, label) in enumerate(datasets):
-    plt.plot(x, BA, color=colors[i], linestyle='-')
-    plt.plot(x, ASR, color=colors[i], linestyle='--')
-    plt.scatter(x, BA, color=colors[i], marker='o')  # 圆形表示 BA
-    plt.scatter(x, ASR, color=colors[i], marker='^')  # 三角形表示 ASR
-    # 添加自定义图例项
-    legend_elements.append(plt.Line2D([0], [0], color=colors[i], marker='o', linestyle='-', label=f'{label} BA'))
-    legend_elements.append(plt.Line2D([0], [0], color=colors[i], marker='^', linestyle='--', label=f'{label} ASR'))
-
-# 设置 X 轴和 Y 轴标签
-plt.xlabel('Pruning Ratio (%)', fontproperties=font)
-plt.ylabel('Ratio (%)', fontproperties=font)
-
-# 添加标题
-plt.title('Pruning Ratio vs BA and ASR', fontproperties=font)
-
-# 添加自定义图例
-plt.legend(handles=legend_elements, loc='best', prop=font)
-
-# 添加网格
-plt.grid(True, linestyle='--', alpha=0.6)
-
-# 保存图像
-# plt.savefig('RNP.pdf', format='pdf')
-plt.savefig('RNP.pdf', format='pdf', bbox_inches='tight', pad_inches=0)
-# 显示图像
-plt.show()
+print(f"All plots saved in {output_dir}")
